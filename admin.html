@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Roselle — Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="admin.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Montserrat:wght@300;400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='30' fill='%23fdeae3'/><path d='M32 14 C 22 22, 22 34, 32 40 C 42 34, 42 22, 32 14z' fill='%23c96a56'/></svg>" />
+</head>
+<body class="admin-body">
+
+  <!-- Login screen -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="brand-mark">La Roselle</span>
+        <span class="brand-tag">Admin Panel</span>
+      </div>
+      <form id="login-form">
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" autocomplete="current-password" required />
+          <div class="error-msg" id="login-error">Incorrect password.</div>
+        </div>
+        <button class="btn" type="submit" style="width:100%; justify-content:center;">Sign in</button>
+      </form>
+      <p class="login-hint">Default password on first use: <code>laroselle</code><br/>(Change it from Settings after you sign in.)</p>
+      <a href="index.html" class="login-back">← Back to shop</a>
+    </div>
+  </div>
+
+  <!-- Admin app -->
+  <div id="admin-app" class="admin-app" style="display:none;">
+    <header class="admin-header">
+      <div class="admin-header-inner">
+        <a href="#" class="brand">
+          <span class="brand-mark">La Roselle</span>
+          <span class="brand-tag">Admin</span>
+        </a>
+        <nav class="admin-tabs">
+          <button class="tab-btn active" data-tab="products">Products</button>
+          <button class="tab-btn" data-tab="orders">Orders <span id="orders-badge" class="badge hidden">0</span></button>
+          <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+        <div class="admin-right">
+          <a href="index.html" class="ghost-link" target="_blank">View shop ↗</a>
+          <button id="logout-btn" class="ghost-link">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <!-- ======== PRODUCTS TAB ======== -->
+      <section class="tab-panel active" data-panel="products">
+        <div class="panel-head">
+          <div>
+            <h2>Products</h2>
+            <p class="panel-sub">Add, edit, or remove products shown on your shop.</p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-ghost" id="export-products-btn">⬇ Export</button>
+            <button class="btn-ghost" id="import-products-btn">⬆ Import</button>
+            <input type="file" id="import-products-input" accept="application/json" hidden />
+            <button class="btn-ghost danger" id="reset-products-btn">Reset to defaults</button>
+            <button class="btn" id="add-product-btn">+ New product</button>
+          </div>
+        </div>
+
+        <div id="products-list" class="products-admin-grid"></div>
+      </section>
+
+      <!-- ======== ORDERS TAB ======== -->
+      <section class="tab-panel" data-panel="orders">
+        <div class="panel-head">
+          <div>
+            <h2>Orders</h2>
+            <p class="panel-sub">Review customer orders and verify Bankily payment proofs.</p>
+          </div>
+          <div class="panel-head-actions">
+            <select id="orders-filter">
+              <option value="all">All statuses</option>
+              <option value="awaiting_verification">Awaiting verification</option>
+              <option value="pending">Pending</option>
+              <option value="accepted">Accepted</option>
+              <option value="shipped">Shipped</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div id="orders-list" class="orders-list"></div>
+      </section>
+
+      <!-- ======== SETTINGS TAB ======== -->
+      <section class="tab-panel" data-panel="settings">
+        <div class="panel-head">
+          <div>
+            <h2>Shop settings</h2>
+            <p class="panel-sub">Configure shop details, payment info, and change your password.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <form id="settings-form" class="card">
+            <h3>Shop details</h3>
+            <div class="field">
+              <label>Shop name</label>
+              <input name="shopName" />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Currency symbol</label>
+                <input name="currency" placeholder="MRU" />
+              </div>
+              <div class="field">
+                <label>WhatsApp number (intl, digits only)</label>
+                <input name="whatsappNumber" placeholder="22200000000" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Bankily recipient name</label>
+                <input name="bankilyName" />
+              </div>
+              <div class="field">
+                <label>Bankily number</label>
+                <input name="bankilyNumber" />
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Contact email</label>
+                <input name="contactEmail" type="email" />
+              </div>
+              <div class="field">
+                <label>Contact phone</label>
+                <input name="contactPhone" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Contact address</label>
+              <input name="contactAddress" />
+            </div>
+            <button type="submit" class="btn">Save settings</button>
+          </form>
+
+          <form id="password-form" class="card">
+            <h3>Change password</h3>
+            <div class="field">
+              <label>Current password</label>
+              <input name="current" type="password" autocomplete="current-password" required />
+            </div>
+            <div class="field">
+              <label>New password</label>
+              <input name="next" type="password" minlength="4" autocomplete="new-password" required />
+            </div>
+            <div class="field">
+              <label>Confirm new password</label>
+              <input name="confirm" type="password" autocomplete="new-password" required />
+            </div>
+            <div class="error-msg" id="password-error"></div>
+            <div class="success-msg" id="password-success">Password updated.</div>
+            <button type="submit" class="btn">Update password</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Product editor modal -->
+  <div id="product-editor" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-editor></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:780px;">
+      <button class="modal-close" data-close-editor aria-label="Close">&times;</button>
+      <form id="product-form" class="checkout-form">
+        <h3 id="editor-title" style="text-align:center;">New product</h3>
+
+        <div class="field">
+          <label>Image</label>
+          <label class="file-upload" id="editor-img-upload">
+            <span id="editor-img-text">Click to upload a product photo</span>
+            <input type="file" accept="image/*" />
+          </label>
+          <img id="editor-img-preview" class="file-preview" alt="" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Product ID (unique, no spaces)</label>
+            <input name="id" required />
+          </div>
+          <div class="field">
+            <label>Price (number)</label>
+            <input name="price" type="number" step="0.01" min="0" required />
+          </div>
+        </div>
+
+        <div class="admin-lang-tabs">
+          <button type="button" class="lang-tab active" data-lang="en">English</button>
+          <button type="button" class="lang-tab" data-lang="fr">Français</button>
+          <button type="button" class="lang-tab" data-lang="ar">العربية</button>
+        </div>
+
+        <div class="lang-fields" data-lang="en">
+          <div class="field"><label>Name (EN)</label><input name="name_en" required /></div>
+          <div class="field"><label>Category (EN)</label><input name="category_en" required /></div>
+          <div class="field"><label>Description (EN)</label><textarea name="description_en" rows="3" required></textarea></div>
+        </div>
+        <div class="lang-fields" data-lang="fr" style="display:none">
+          <div class="field"><label>Nom (FR)</label><input name="name_fr" /></div>
+          <div class="field"><label>Catégorie (FR)</label><input name="category_fr" /></div>
+          <div class="field"><label>Description (FR)</label><textarea name="description_fr" rows="3"></textarea></div>
+        </div>
+        <div class="lang-fields" data-lang="ar" style="display:none" dir="rtl">
+          <div class="field"><label>الاسم (AR)</label><input name="name_ar" /></div>
+          <div class="field"><label>الفئة (AR)</label><input name="category_ar" /></div>
+          <div class="field"><label>الوصف (AR)</label><textarea name="description_ar" rows="3"></textarea></div>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" data-close-editor>Cancel</button>
+          <button type="submit" class="btn">Save product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Order detail modal -->
+  <div id="order-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-order></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:760px;">
+      <button class="modal-close" data-close-order aria-label="Close">&times;</button>
+      <div id="order-detail" class="order-detail"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="translations.js"></script>
+  <script src="products.js"></script>
+  <script src="storage.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
