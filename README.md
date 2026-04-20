@@ -45,6 +45,29 @@ Then visit:
    - Update the shop details, **Bankily number**, **Bankily recipient name**, **currency**, and your **WhatsApp number** (international format, digits only, e.g. `22200000000`).
    - **Change the password** from the "Change password" card. This is important — do it right after your first login.
 
+## Admin tabs
+
+After signing in, you'll see five tabs:
+
+### 🛍 Products
+Add, edit, delete products. Upload photos, set prices, write translations in EN/FR/AR. **Export / Import** as JSON; **Reset** to defaults.
+
+### 📦 Orders
+View all customer orders with a live badge for pending ones. Filter by status. Click any order to see customer info, items, Bankily proof image, and update its status (`awaiting verification → accepted → shipped → completed`).
+
+### ✍ Content
+Edit every piece of UI text on the entire website in EN / FR / AR. Each field shows the current default as a placeholder — leave blank to keep the default. Click a language tab to switch. Works for the hero, nav, product section, about, contact, cart, checkout, and footer.
+
+### 🎨 Appearance
+- **Brand colors**: change any of six color variables with a color-picker or HEX code (primary pink, button color, headings, gold accent, body text, background).
+- **Logo**: upload a square image to replace the rose icon.
+- **Hero image**: upload a wide photo to replace the pink gradient background (automatically adds a dark overlay so text stays readable).
+- **Favicon**: upload the small browser-tab icon.
+- **Section visibility**: toggle the About section, Contact section, hero flowers, each language, and each payment method.
+
+### ⚙ Settings
+Shop name, currency, Bankily info, WhatsApp number, contact details, social links (Instagram / Facebook / TikTok), shipping fee, free-shipping threshold, minimum order. Change your admin password.
+
 ## Managing products (admin)
 
 In the **Products** tab you can:

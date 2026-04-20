@@ -7,6 +7,8 @@ const STORAGE_KEYS = {
   products: "laroselle.products",
   orders:   "laroselle.orders",
   settings: "laroselle.settings",
+  content:  "laroselle.content",
+  theme:    "laroselle.theme",
   cart:     "laroselle.cart",
   admin:    "laroselle.admin",
   lang:     "la-roselle-lang"
@@ -20,8 +22,80 @@ const DEFAULT_SETTINGS = {
   whatsappNumber: "",              // e.g. "22200000000" (intl, no +)
   contactEmail: "hello@laroselle.com",
   contactPhone: "+000 000 000",
-  contactAddress: "Your shop address here"
+  contactAddress: "Your shop address here",
+  /* Payment methods on/off */
+  paymentBankilyEnabled: true,
+  paymentCodEnabled: true,
+  /* Social links (leave empty to hide) */
+  instagramUrl: "",
+  facebookUrl: "",
+  tiktokUrl: "",
+  /* Languages — uncheck to hide the language switch button */
+  langEnEnabled: true,
+  langFrEnabled: true,
+  langArEnabled: true,
+  /* Shipping & order notes */
+  shippingFee: 0,
+  freeShippingAbove: 0,  // 0 = disabled
+  minOrder: 0,           // 0 = no minimum
+  /* Visibility toggles */
+  showAboutSection: true,
+  showContactSection: true,
+  showHeroFlowers: true
 };
+
+/* Content overrides — merged on top of TRANSLATIONS for the customer site.
+ * Shape: { en: { "key": "text", ... }, fr: {...}, ar: {...} } */
+const DEFAULT_CONTENT = { en: {}, fr: {}, ar: {} };
+
+/* Theme overrides — applied as CSS custom properties at runtime. */
+const DEFAULT_THEME = {
+  colors: {
+    blush400: "",     // hero/cta base pink — leave empty for default
+    blush500: "",     // buttons/prices
+    roseDeep: "",     // headings
+    gold:     "",     // accents
+    ink:      "",     // body text
+    cream:    ""      // background
+  },
+  logoDataUrl: "",      // optional replacement for the rose icon
+  heroImageDataUrl: "", // optional background image for the hero
+  faviconDataUrl: ""    // optional favicon override
+};
+
+/* The editable-content schema: defines which UI strings the admin can override,
+ * grouped by section for the editor. The default text for each key comes
+ * from translations.js (TRANSLATIONS) — here we just list the keys. */
+const CONTENT_SCHEMA = [
+  { title: "Header & brand", keys: [
+    ["brand.tagline", "input"],
+    ["nav.home", "input"], ["nav.products", "input"], ["nav.about", "input"], ["nav.contact", "input"]
+  ]},
+  { title: "Hero (top banner)", keys: [
+    ["hero.eyebrow", "input"], ["hero.title", "input"],
+    ["hero.subtitle", "textarea"], ["hero.cta", "input"]
+  ]},
+  { title: "Products section", keys: [
+    ["products.eyebrow", "input"], ["products.title", "input"],
+    ["products.subtitle", "textarea"], ["products.filter", "input"],
+    ["products.all", "input"], ["products.addToCart", "input"]
+  ]},
+  { title: "About section", keys: [
+    ["about.eyebrow", "input"], ["about.title", "input"], ["about.body", "textarea"]
+  ]},
+  { title: "Contact section", keys: [
+    ["contact.eyebrow", "input"], ["contact.title", "input"], ["contact.body", "textarea"],
+    ["contact.email", "input"], ["contact.phone", "input"], ["contact.address", "input"],
+    ["contact.addressValue", "input"]
+  ]},
+  { title: "Cart & checkout", keys: [
+    ["cart.title", "input"], ["cart.checkout", "input"], ["cart.continue", "input"],
+    ["checkout.bankilyText", "textarea"], ["checkout.proofHelp", "input"]
+  ]},
+  { title: "Footer", keys: [
+    ["footer.rights", "input"]
+  ]}
+];
 
 const DEFAULT_ADMIN = {
   // Default admin password — CHANGE THIS from the admin Settings tab.
@@ -104,8 +178,84 @@ const Storage = {
   },
   saveAdmin(a) {
     localStorage.setItem(STORAGE_KEYS.admin, JSON.stringify(a));
+  },
+
+  /* ----- Content (text overrides, per language) ----- */
+  getContent() {
+    const raw = localStorage.getItem(STORAGE_KEYS.content);
+    try {
+      const parsed = raw ? JSON.parse(raw) : {};
+      return {
+        en: { ...(parsed.en || {}) },
+        fr: { ...(parsed.fr || {}) },
+        ar: { ...(parsed.ar || {}) }
+      };
+    } catch (e) { return { en: {}, fr: {}, ar: {} }; }
+  },
+  saveContent(c) {
+    localStorage.setItem(STORAGE_KEYS.content, JSON.stringify(c));
+  },
+  resetContent() {
+    localStorage.removeItem(STORAGE_KEYS.content);
+  },
+
+  /* ----- Theme (colors + images) ----- */
+  getTheme() {
+    const raw = localStorage.getItem(STORAGE_KEYS.theme);
+    try {
+      const parsed = raw ? JSON.parse(raw) : {};
+      return {
+        ...DEFAULT_THEME,
+        ...parsed,
+        colors: { ...DEFAULT_THEME.colors, ...(parsed.colors || {}) }
+      };
+    } catch (e) { return { ...DEFAULT_THEME, colors: { ...DEFAULT_THEME.colors } }; }
+  },
+  saveTheme(t) {
+    localStorage.setItem(STORAGE_KEYS.theme, JSON.stringify(t));
+  },
+  resetTheme() {
+    localStorage.removeItem(STORAGE_KEYS.theme);
   }
 };
+
+/* ---------- Translation lookup with content overrides ---------- */
+function tText(lang, key) {
+  const overrides = Storage.getContent();
+  const override = overrides[lang] && overrides[lang][key];
+  if (override && override.trim() !== "") return override;
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
+  return dict[key] != null ? dict[key] : key;
+}
+
+/* ---------- Apply theme (CSS custom properties + favicon) ---------- */
+function applyTheme() {
+  const theme = Storage.getTheme();
+  const root = document.documentElement;
+  const map = {
+    blush400: "--blush-400",
+    blush500: "--blush-500",
+    roseDeep: "--rose-deep",
+    gold:     "--gold",
+    ink:      "--ink",
+    cream:    "--cream"
+  };
+  Object.entries(map).forEach(([k, cssVar]) => {
+    const v = theme.colors[k];
+    if (v && v.trim() !== "") root.style.setProperty(cssVar, v);
+    else root.style.removeProperty(cssVar);
+  });
+
+  if (theme.faviconDataUrl) {
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
+    link.href = theme.faviconDataUrl;
+  }
+}
 
 /* ---------- Helpers ---------- */
 async function sha256(text) {

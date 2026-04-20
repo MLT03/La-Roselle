@@ -7,7 +7,8 @@
     editorImageDataUrl: "",
     editorProductId: null,
     activeTab: "products",
-    orderFilter: "all"
+    orderFilter: "all",
+    contentLang: "en"
   };
 
   /* ---------- Login ---------- */
@@ -464,11 +465,192 @@
   }
   function escapeAttr(s) { return escapeHtml(s); }
 
+  /* ---------- Content editor ---------- */
+  function renderContentEditor() {
+    const wrap = document.getElementById("content-editor");
+    if (!wrap) return;
+    wrap.setAttribute("dir", state.contentLang === "ar" ? "rtl" : "ltr");
+    const overrides = Storage.getContent();
+    const langDict = TRANSLATIONS[state.contentLang] || {};
+    const langOverrides = overrides[state.contentLang] || {};
+
+    const html = CONTENT_SCHEMA.map((group) => {
+      const fields = group.keys.map(([key, kind]) => {
+        const def = langDict[key] || "";
+        const cur = langOverrides[key] != null ? langOverrides[key] : "";
+        const id = `c_${key.replace(/\./g, "_")}`;
+        const input = kind === "textarea"
+          ? `<textarea id="${id}" data-key="${escapeAttr(key)}" rows="3" placeholder="${escapeAttr(def)}">${escapeHtml(cur)}</textarea>`
+          : `<input type="text" id="${id}" data-key="${escapeAttr(key)}" placeholder="${escapeAttr(def)}" value="${escapeAttr(cur)}" />`;
+        return `
+          <div class="field">
+            <label for="${id}">${escapeHtml(key)}</label>
+            ${input}
+            <span class="default-hint">Default: ${escapeHtml(def) || "<em>(empty)</em>"}</span>
+          </div>`;
+      }).join("");
+      return `<div class="content-group"><h3>${escapeHtml(group.title)}</h3>${fields}</div>`;
+    }).join("");
+
+    wrap.innerHTML = html;
+  }
+  function switchContentLang(lang) {
+    // Save current tab values before switching so edits aren't lost
+    collectContentInto(state.contentLang, /* save */ false);
+    state.contentLang = lang;
+    document.querySelectorAll("[data-clang]").forEach((b) => b.classList.toggle("active", b.dataset.clang === lang));
+    renderContentEditor();
+  }
+  function collectContentInto(lang, save) {
+    const overrides = Storage.getContent();
+    overrides[lang] = overrides[lang] || {};
+    document.querySelectorAll("#content-editor [data-key]").forEach((el) => {
+      const key = el.getAttribute("data-key");
+      const val = el.value.trim();
+      if (val === "") delete overrides[lang][key];
+      else overrides[lang][key] = val;
+    });
+    if (save) Storage.saveContent(overrides);
+    else {
+      // Only keep in memory by saving transient overrides under a staging key; simpler to just save.
+      // We choose to just persist on switch so nothing is lost.
+      Storage.saveContent(overrides);
+    }
+  }
+  function saveContent() {
+    collectContentInto(state.contentLang, true);
+    toast("Content saved");
+  }
+  function resetContent() {
+    if (!confirm("Reset all text overrides for all languages?")) return;
+    Storage.resetContent();
+    renderContentEditor();
+    toast("Content reset");
+  }
+
+  /* ---------- Appearance (colors + images) ---------- */
+  function loadAppearance() {
+    const theme = Storage.getTheme();
+    const s = Storage.getSettings();
+
+    const form = document.getElementById("colors-form");
+    if (form) {
+      Object.entries(theme.colors).forEach(([k, v]) => {
+        const text = form.querySelector(`[name="${k}"]`);
+        const pick = form.querySelector(`[data-color-pick="${k}"]`);
+        if (text) text.value = v || "";
+        if (pick) pick.value = v && /^#[0-9a-fA-F]{6}$/.test(v) ? v : "#ffffff";
+      });
+    }
+
+    // Logo
+    const logoPreview = document.getElementById("logo-preview");
+    if (theme.logoDataUrl) {
+      logoPreview.src = theme.logoDataUrl;
+      logoPreview.classList.add("show");
+      document.getElementById("logo-upload").classList.add("has-file");
+      document.getElementById("logo-upload-text").textContent = "Logo uploaded — click to change";
+    } else {
+      logoPreview.classList.remove("show");
+      document.getElementById("logo-upload").classList.remove("has-file");
+      document.getElementById("logo-upload-text").textContent = "Upload a square logo (PNG recommended)";
+    }
+
+    const heroPreview = document.getElementById("hero-preview");
+    if (theme.heroImageDataUrl) {
+      heroPreview.src = theme.heroImageDataUrl;
+      heroPreview.classList.add("show");
+      document.getElementById("hero-upload").classList.add("has-file");
+      document.getElementById("hero-upload-text").textContent = "Hero image uploaded — click to change";
+    } else {
+      heroPreview.classList.remove("show");
+      document.getElementById("hero-upload").classList.remove("has-file");
+      document.getElementById("hero-upload-text").textContent = "Upload a wide photo for the hero";
+    }
+
+    const fav = document.getElementById("favicon-preview");
+    if (theme.faviconDataUrl) {
+      fav.src = theme.faviconDataUrl;
+      fav.classList.add("show");
+      document.getElementById("favicon-upload").classList.add("has-file");
+      document.getElementById("favicon-upload-text").textContent = "Favicon uploaded";
+    } else {
+      fav.classList.remove("show");
+      document.getElementById("favicon-upload").classList.remove("has-file");
+      document.getElementById("favicon-upload-text").textContent = "Small square icon (32×32 or 64×64)";
+    }
+
+    // Visibility toggles
+    const vf = document.getElementById("visibility-form");
+    if (vf) {
+      ["showAboutSection", "showContactSection", "showHeroFlowers", "langEnEnabled",
+       "langFrEnabled", "langArEnabled", "paymentBankilyEnabled", "paymentCodEnabled"].forEach((k) => {
+        const cb = vf.querySelector(`[name="${k}"]`);
+        if (cb) cb.checked = !!s[k];
+      });
+    }
+  }
+
+  function saveColors(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    const theme = Storage.getTheme();
+    ["blush400", "blush500", "roseDeep", "gold", "ink", "cream"].forEach((k) => {
+      const v = (form.querySelector(`[name="${k}"]`).value || "").trim();
+      theme.colors[k] = v;
+    });
+    Storage.saveTheme(theme);
+    toast("Colors saved");
+  }
+
+  function saveVisibility(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    const s = Storage.getSettings();
+    ["showAboutSection", "showContactSection", "showHeroFlowers", "langEnEnabled",
+     "langFrEnabled", "langArEnabled", "paymentBankilyEnabled", "paymentCodEnabled"].forEach((k) => {
+      s[k] = !!form.querySelector(`[name="${k}"]`).checked;
+    });
+    Storage.saveSettings(s);
+    toast("Visibility settings saved");
+  }
+
+  async function handleImageUpload(inputSel, themeKey, maxSize, successText) {
+    const input = document.querySelector(inputSel);
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await fileToResizedDataUrl(file, maxSize, 0.85);
+      const theme = Storage.getTheme();
+      theme[themeKey] = dataUrl;
+      Storage.saveTheme(theme);
+      loadAppearance();
+      toast(successText);
+    } catch (err) { console.error(err); }
+  }
+
+  function removeThemeImage(themeKey, successText) {
+    const theme = Storage.getTheme();
+    theme[themeKey] = "";
+    Storage.saveTheme(theme);
+    loadAppearance();
+    toast(successText);
+  }
+
+  function resetTheme() {
+    if (!confirm("Reset all appearance settings (colors and images)?")) return;
+    Storage.resetTheme();
+    loadAppearance();
+    toast("Appearance reset");
+  }
+
   function refreshAll() {
     renderProducts();
     renderOrders();
     renderOrdersBadge();
     loadSettingsForm();
+    renderContentEditor();
+    loadAppearance();
   }
 
   /* ---------- Init ---------- */
@@ -529,6 +711,40 @@
     document.getElementById("settings-form").addEventListener("submit", saveSettingsForm);
     document.getElementById("password-form").addEventListener("submit", savePassword);
 
+    // Content editor
+    document.querySelectorAll("[data-clang]").forEach((b) => {
+      b.addEventListener("click", () => switchContentLang(b.dataset.clang));
+    });
+    document.getElementById("save-content-btn").addEventListener("click", saveContent);
+    document.getElementById("reset-content-btn").addEventListener("click", resetContent);
+
+    // Appearance forms
+    document.getElementById("colors-form").addEventListener("submit", saveColors);
+    document.getElementById("visibility-form").addEventListener("submit", saveVisibility);
+    document.getElementById("reset-theme-btn").addEventListener("click", resetTheme);
+
+    // Color picker ↔ text field sync
+    document.querySelectorAll("[data-color-pick]").forEach((pick) => {
+      const key = pick.getAttribute("data-color-pick");
+      const text = document.querySelector(`#colors-form [name="${key}"]`);
+      pick.addEventListener("input", () => { text.value = pick.value; });
+      text.addEventListener("input", () => {
+        if (/^#[0-9a-fA-F]{6}$/.test(text.value)) pick.value = text.value;
+      });
+    });
+
+    // Image uploads (logo/hero/favicon)
+    document.querySelector('#logo-upload input[type="file"]').addEventListener("change", () =>
+      handleImageUpload('#logo-upload input[type="file"]', "logoDataUrl", 400, "Logo saved"));
+    document.querySelector('#hero-upload input[type="file"]').addEventListener("change", () =>
+      handleImageUpload('#hero-upload input[type="file"]', "heroImageDataUrl", 1800, "Hero image saved"));
+    document.querySelector('#favicon-upload input[type="file"]').addEventListener("change", () =>
+      handleImageUpload('#favicon-upload input[type="file"]', "faviconDataUrl", 128, "Favicon saved"));
+
+    document.getElementById("remove-logo-btn").addEventListener("click", () => removeThemeImage("logoDataUrl", "Logo removed"));
+    document.getElementById("remove-hero-btn").addEventListener("click", () => removeThemeImage("heroImageDataUrl", "Hero image removed"));
+    document.getElementById("remove-favicon-btn").addEventListener("click", () => removeThemeImage("faviconDataUrl", "Favicon removed"));
+
     // ESC closes modals
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { closeEditor(); closeOrder(); }
@@ -539,7 +755,9 @@
       if (!state.authed) return;
       if (e.key === STORAGE_KEYS.orders) { renderOrders(); renderOrdersBadge(); }
       if (e.key === STORAGE_KEYS.products) renderProducts();
-      if (e.key === STORAGE_KEYS.settings) loadSettingsForm();
+      if (e.key === STORAGE_KEYS.settings) { loadSettingsForm(); loadAppearance(); }
+      if (e.key === STORAGE_KEYS.content) renderContentEditor();
+      if (e.key === STORAGE_KEYS.theme) loadAppearance();
     });
   });
 })();

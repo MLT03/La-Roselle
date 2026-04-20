@@ -14,7 +14,7 @@
   <header class="site-header">
     <div class="header-inner">
       <a href="#home" class="brand" aria-label="La Roselle">
-        <span class="brand-mark">La Roselle</span>
+        <span class="brand-mark" data-setting="shopName">La Roselle</span>
         <span class="brand-tag" data-i18n="brand.tagline">Feminine essentials, crafted with care</span>
       </a>
 
@@ -155,9 +155,10 @@
       <p data-i18n="contact.body">Questions about a product or an order? We're here to help.</p>
       <ul class="contact-list">
         <li><span data-i18n="contact.email">Email</span>:&nbsp;<a href="mailto:hello@laroselle.com">hello@laroselle.com</a></li>
-        <li><span data-i18n="contact.phone">Phone</span>:&nbsp;+000&nbsp;000&nbsp;000</li>
+        <li><span data-i18n="contact.phone">Phone</span>:&nbsp;<span id="contact-phone-value">+000 000 000</span></li>
         <li><span data-i18n="contact.address">Address</span>:&nbsp;<span data-i18n="contact.addressValue">Your shop address here</span></li>
       </ul>
+      <div id="socials" class="socials" aria-label="Social media"></div>
     </section>
   </main>
 
@@ -167,6 +168,23 @@
     <div class="modal-dialog" role="dialog" aria-modal="true">
       <button class="modal-close" data-close-modal aria-label="Close">&times;</button>
       <div class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Share modal -->
+  <div id="share-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-share></div>
+    <div class="modal-dialog share-dialog" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close-share aria-label="Close">&times;</button>
+      <div class="share-content">
+        <h3 data-i18n="products.shareTitle">Share this product</h3>
+        <div class="share-preview" id="share-preview"></div>
+        <div class="share-buttons" id="share-buttons"></div>
+        <div class="share-link-row">
+          <input type="text" id="share-link-input" readonly />
+          <button type="button" id="share-copy-btn" class="btn-ghost" data-i18n="share.copyLink">Copy link</button>
+        </div>
+      </div>
     </div>
   </div>
 

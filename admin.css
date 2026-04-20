@@ -464,6 +464,92 @@
 }
 .success-msg.show { display: block; }
 
+/* ---------- Content editor ---------- */
+.content-editor {
+  display: grid;
+  gap: 1.5rem;
+}
+.content-group {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem 1.6rem;
+  box-shadow: var(--shadow-sm);
+}
+.content-group h3 {
+  margin: 0 0 1rem;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--rose-deep);
+  font-size: 1.3rem;
+}
+.content-group .field { margin-bottom: .9rem; }
+.content-group .field label {
+  font-size: .72rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold-deep);
+  margin-bottom: .25rem;
+}
+.content-group .default-hint {
+  display: block;
+  margin-top: .25rem;
+  font-size: .78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.content-editor[dir="rtl"] .field input,
+.content-editor[dir="rtl"] .field textarea { direction: rtl; text-align: right; }
+
+/* ---------- Color pickers ---------- */
+.color-input-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.color-input-row input[type="color"] {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.color-input-row input[type="text"] {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  font-size: .88rem;
+}
+
+/* ---------- Toggles ---------- */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: .6rem;
+  margin-bottom: 1.2rem;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .8rem 1rem;
+  background: var(--blush-50);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: .9rem;
+  transition: all .2s ease;
+}
+.toggle:hover { border-color: var(--blush-300); }
+.toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blush-500);
+  cursor: pointer;
+}
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed;

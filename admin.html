@@ -44,6 +44,8 @@
         <nav class="admin-tabs">
           <button class="tab-btn active" data-tab="products">Products</button>
           <button class="tab-btn" data-tab="orders">Orders <span id="orders-badge" class="badge hidden">0</span></button>
+          <button class="tab-btn" data-tab="content">Content</button>
+          <button class="tab-btn" data-tab="appearance">Appearance</button>
           <button class="tab-btn" data-tab="settings">Settings</button>
         </nav>
         <div class="admin-right">
@@ -93,6 +95,145 @@
           </div>
         </div>
         <div id="orders-list" class="orders-list"></div>
+      </section>
+
+      <!-- ======== CONTENT TAB ======== -->
+      <section class="tab-panel" data-panel="content">
+        <div class="panel-head">
+          <div>
+            <h2>Content</h2>
+            <p class="panel-sub">Edit every piece of text on your site, in all three languages. Leave a field empty to use the default.</p>
+          </div>
+          <div class="panel-head-actions">
+            <div class="admin-lang-tabs" id="content-lang-tabs">
+              <button type="button" class="lang-tab active" data-clang="en">English</button>
+              <button type="button" class="lang-tab" data-clang="fr">Français</button>
+              <button type="button" class="lang-tab" data-clang="ar">العربية</button>
+            </div>
+            <button class="btn-ghost danger" id="reset-content-btn">Reset all text</button>
+            <button class="btn" id="save-content-btn">Save content</button>
+          </div>
+        </div>
+        <div id="content-editor" class="content-editor"></div>
+      </section>
+
+      <!-- ======== APPEARANCE TAB ======== -->
+      <section class="tab-panel" data-panel="appearance">
+        <div class="panel-head">
+          <div>
+            <h2>Appearance</h2>
+            <p class="panel-sub">Customize colors, logo, hero image, and section visibility.</p>
+          </div>
+          <div class="panel-head-actions">
+            <button class="btn-ghost danger" id="reset-theme-btn">Reset appearance</button>
+          </div>
+        </div>
+
+        <div class="settings-grid" style="grid-template-columns: 1fr 1fr;">
+          <form id="colors-form" class="card">
+            <h3>Brand colors</h3>
+            <p class="panel-sub" style="margin-bottom:1.2rem;">Leave blank to keep the default.</p>
+
+            <div class="field-row">
+              <div class="field">
+                <label>Primary pink (hero accents)</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="blush400" />
+                  <input type="text" name="blush400" placeholder="#e08a74" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Button & price color</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="blush500" />
+                  <input type="text" name="blush500" placeholder="#c96a56" />
+                </div>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Headings color</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="roseDeep" />
+                  <input type="text" name="roseDeep" placeholder="#8b3a4a" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Gold accent</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="gold" />
+                  <input type="text" name="gold" placeholder="#c9a36a" />
+                </div>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Body text</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="ink" />
+                  <input type="text" name="ink" placeholder="#3a2329" />
+                </div>
+              </div>
+              <div class="field">
+                <label>Page background</label>
+                <div class="color-input-row">
+                  <input type="color" data-color-pick="cream" />
+                  <input type="text" name="cream" placeholder="#fffaf3" />
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="btn">Save colors</button>
+          </form>
+
+          <form id="images-form" class="card">
+            <h3>Logo & images</h3>
+
+            <div class="field">
+              <label>Shop logo (replaces the rose icon next to the name)</label>
+              <label class="file-upload" id="logo-upload">
+                <span id="logo-upload-text">Upload a square logo (PNG recommended)</span>
+                <input type="file" accept="image/*" />
+              </label>
+              <img id="logo-preview" class="file-preview" alt="" />
+              <button type="button" class="btn-ghost" id="remove-logo-btn" style="margin-top:.5rem;">Remove logo</button>
+            </div>
+
+            <div class="field">
+              <label>Hero background image (optional — replaces the pink gradient)</label>
+              <label class="file-upload" id="hero-upload">
+                <span id="hero-upload-text">Upload a wide photo for the hero</span>
+                <input type="file" accept="image/*" />
+              </label>
+              <img id="hero-preview" class="file-preview" alt="" />
+              <button type="button" class="btn-ghost" id="remove-hero-btn" style="margin-top:.5rem;">Remove hero image</button>
+            </div>
+
+            <div class="field">
+              <label>Favicon (browser tab icon)</label>
+              <label class="file-upload" id="favicon-upload">
+                <span id="favicon-upload-text">Small square icon (32×32 or 64×64)</span>
+                <input type="file" accept="image/*" />
+              </label>
+              <img id="favicon-preview" class="file-preview" alt="" />
+              <button type="button" class="btn-ghost" id="remove-favicon-btn" style="margin-top:.5rem;">Remove favicon</button>
+            </div>
+          </form>
+
+          <form id="visibility-form" class="card" style="grid-column: span 2;">
+            <h3>Section visibility & features</h3>
+            <div class="toggle-grid">
+              <label class="toggle"><input type="checkbox" name="showAboutSection" /> <span>Show "About" section</span></label>
+              <label class="toggle"><input type="checkbox" name="showContactSection" /> <span>Show "Contact" section</span></label>
+              <label class="toggle"><input type="checkbox" name="showHeroFlowers" /> <span>Show floating flowers in hero</span></label>
+              <label class="toggle"><input type="checkbox" name="langEnEnabled" /> <span>Enable English (EN)</span></label>
+              <label class="toggle"><input type="checkbox" name="langFrEnabled" /> <span>Enable French (FR)</span></label>
+              <label class="toggle"><input type="checkbox" name="langArEnabled" /> <span>Enable Arabic (ع)</span></label>
+              <label class="toggle"><input type="checkbox" name="paymentBankilyEnabled" /> <span>Enable Bankily payment</span></label>
+              <label class="toggle"><input type="checkbox" name="paymentCodEnabled" /> <span>Enable Cash on delivery</span></label>
+            </div>
+            <button type="submit" class="btn">Save visibility</button>
+          </form>
+        </div>
       </section>
 
       <!-- ======== SETTINGS TAB ======== -->
@@ -145,6 +286,40 @@
               <label>Contact address</label>
               <input name="contactAddress" />
             </div>
+
+            <h3 style="margin-top:1.5rem;">Social links</h3>
+            <p class="panel-sub" style="margin-bottom:1rem;">Leave blank to hide an icon.</p>
+            <div class="field">
+              <label>Instagram URL</label>
+              <input name="instagramUrl" placeholder="https://instagram.com/laroselle" />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Facebook URL</label>
+                <input name="facebookUrl" placeholder="https://facebook.com/laroselle" />
+              </div>
+              <div class="field">
+                <label>TikTok URL</label>
+                <input name="tiktokUrl" placeholder="https://tiktok.com/@laroselle" />
+              </div>
+            </div>
+
+            <h3 style="margin-top:1.5rem;">Orders & shipping</h3>
+            <div class="field-row">
+              <div class="field">
+                <label>Shipping fee (0 for free)</label>
+                <input name="shippingFee" type="number" min="0" step="1" />
+              </div>
+              <div class="field">
+                <label>Free shipping above (0 = off)</label>
+                <input name="freeShippingAbove" type="number" min="0" step="1" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Minimum order amount (0 = no minimum)</label>
+              <input name="minOrder" type="number" min="0" step="1" />
+            </div>
+
             <button type="submit" class="btn">Save settings</button>
           </form>
 
