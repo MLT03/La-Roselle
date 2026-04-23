@@ -26,6 +26,7 @@
   }
 
   async function showApp() {
+    if (state.authed) return;
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("admin-app").style.display = "flex";
     state.authed = true;
@@ -42,9 +43,8 @@
     await refreshAll();
   }
 
-  async function showLogin() {
+  function showLogin() {
     unsubscribeAll();
-    try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
     document.getElementById("admin-app").style.display = "none";
     document.getElementById("login-screen").style.display = "flex";
     state.authed = false;
@@ -1190,13 +1190,18 @@
 
   /* ============ Init ============ */
   document.addEventListener("DOMContentLoaded", async () => {
+    console.log("[admin] DOMContentLoaded");
     // Auth state
+    console.log("[admin] before getSession");
     const session = await Storage.getSession();
+    console.log("[admin] after getSession", !!session);
     if (session) await showApp(); else showLogin();
+    console.log("[admin] after first show");
 
     sb.auth.onAuthStateChange((_e, s) => {
+      console.log("[admin] authChange", _e, !!s);
       if (s) { showApp().catch(console.error); }
-      else { showLogin().catch(console.error); }
+      else { showLogin(); }
     });
 
     document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -1213,7 +1218,9 @@
         err.classList.add("show");
       }
     });
-    document.getElementById("logout-btn").addEventListener("click", () => showLogin());
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      sb.auth.signOut().catch(console.error);
+    });
 
     // Tabs
     document.querySelectorAll(".tab-btn").forEach((b) => {
