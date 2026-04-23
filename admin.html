@@ -371,10 +371,26 @@
             <label>Price (number)</label>
             <input name="price" type="number" step="0.01" min="0" required />
           </div>
-          <div class="field">
-            <label>Stock</label>
-            <input name="stock" type="number" step="1" min="0" required />
+          <div class="field" id="product-type-field">
+            <label>Product type</label>
+            <select name="productType">
+              <option value="standard">Standard (single stock)</option>
+              <option value="shoes">Shoes (sizes 36–44)</option>
+              <option value="clothes">Clothes (XS–XXL)</option>
+            </select>
           </div>
+        </div>
+
+        <div class="field" id="stock-field">
+          <label>Stock</label>
+          <input name="stock" type="number" step="1" min="0" />
+        </div>
+
+        <div class="field" id="variants-field" style="display:none;">
+          <label>Stock per size</label>
+          <p class="panel-sub" style="margin:-.25rem 0 .5rem;">Enter a quantity for each size you carry. Leave at 0 (or blank) for sizes you don't stock.</p>
+          <div id="variants-grid" class="variants-grid"></div>
+          <div class="variants-total" id="variants-total">Total: 0</div>
         </div>
 
         <div class="admin-lang-tabs">

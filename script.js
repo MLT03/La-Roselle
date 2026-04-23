@@ -270,8 +270,9 @@
       }
     }
 
-    const outOfStock = (Number(p.stock) || 0) <= 0;
-    const lowStock = !outOfStock && (Number(p.stock) || 0) <= 3;
+    const totalStock = hasVariants(p) ? totalVariantStock(p) : (Number(p.stock) || 0);
+    const outOfStock = totalStock <= 0;
+    const lowStock = !outOfStock && totalStock <= 3 && !hasVariants(p);
     if (outOfStock) {
       const pill = document.createElement("div");
       pill.className = "stock-pill out";
@@ -280,7 +281,7 @@
     } else if (lowStock) {
       const pill = document.createElement("div");
       pill.className = "stock-pill low";
-      pill.textContent = (t("products.onlyNLeft") || "Only {n} left").replace("{n}", p.stock);
+      pill.textContent = (t("products.onlyNLeft") || "Only {n} left").replace("{n}", totalStock);
       imgWrap.appendChild(pill);
     }
 
@@ -311,6 +312,12 @@
       addBtn.disabled = true;
       addBtn.classList.add("disabled");
       addBtn.textContent = t("products.outOfStock");
+    } else if (hasVariants(p)) {
+      addBtn.textContent = t("products.chooseSize") || "Choose a size";
+      addBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openProductModal(p);
+      });
     } else {
       addBtn.textContent = t("products.addToCart");
       addBtn.addEventListener("click", (e) => {
@@ -340,8 +347,10 @@
     const cat  = p.category[state.lang] || p.category.en;
     const desc = p.description[state.lang] || p.description.en;
     const imgs = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
-    const outOfStock = (Number(p.stock) || 0) <= 0;
-    const lowStock = !outOfStock && (Number(p.stock) || 0) <= 3;
+    const usesVariants = hasVariants(p);
+    const totalStock = usesVariants ? totalVariantStock(p) : (Number(p.stock) || 0);
+    const outOfStock = totalStock <= 0;
+    const lowStock = !outOfStock && !usesVariants && totalStock <= 3;
 
     let galleryHtml;
     if (imgs.length === 0) {
@@ -369,7 +378,23 @@
     if (outOfStock) {
       stockBadgeHtml = `<div class="modal-stock out">${escapeHtml(t("products.outOfStock"))}</div>`;
     } else if (lowStock) {
-      stockBadgeHtml = `<div class="modal-stock low">${escapeHtml((t("products.onlyNLeft") || "Only {n} left").replace("{n}", p.stock))}</div>`;
+      stockBadgeHtml = `<div class="modal-stock low">${escapeHtml((t("products.onlyNLeft") || "Only {n} left").replace("{n}", totalStock))}</div>`;
+    }
+
+    let sizePickerHtml = "";
+    if (usesVariants && !outOfStock) {
+      const sizesAll = SIZE_PRESETS[p.productType] || p.variants.map((v) => v.size);
+      const buttons = sizesAll.map((s) => {
+        const v = findVariant(p, s);
+        const stk = v ? (Number(v.stock) || 0) : 0;
+        const unavailable = stk <= 0;
+        return `<button type="button" class="size-opt${unavailable ? " unavailable" : ""}" data-size="${escapeAttr(s)}" ${unavailable ? "disabled" : ""}>${escapeHtml(s)}</button>`;
+      }).join("");
+      sizePickerHtml = `
+        <div class="size-picker">
+          <div class="size-label">${escapeHtml(t("products.chooseSize") || "Choose a size")}</div>
+          <div class="size-options">${buttons}</div>
+        </div>`;
     }
 
     body.innerHTML = `
@@ -380,8 +405,9 @@
         <div class="modal-price">${escapeHtml(formatPrice(p.price))}</div>
         ${stockBadgeHtml}
         <p class="modal-desc">${escapeHtml(desc)}</p>
+        ${sizePickerHtml}
         <div style="display:flex; gap:.7rem; justify-content:center; margin-top:1.5rem; flex-wrap:wrap;">
-          <button class="btn" id="modal-add-btn"${outOfStock ? " disabled" : ""}>${escapeHtml(outOfStock ? t("products.outOfStock") : t("products.addToCart"))}</button>
+          <button class="btn" id="modal-add-btn"${outOfStock || usesVariants ? " disabled" : ""}>${escapeHtml(outOfStock ? t("products.outOfStock") : (usesVariants ? (t("products.chooseSize") || "Choose a size") : t("products.addToCart")))}</button>
           <button class="btn-ghost" id="modal-share-btn" style="display:inline-flex; align-items:center; gap:.4rem;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             ${escapeHtml(t("products.share"))}
@@ -390,9 +416,24 @@
       </div>
     `;
 
+    let selectedSize = "";
+    if (usesVariants) {
+      body.querySelectorAll(".size-opt").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          body.querySelectorAll(".size-opt").forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          selectedSize = btn.getAttribute("data-size");
+          const addBtn = document.getElementById("modal-add-btn");
+          addBtn.disabled = false;
+          addBtn.textContent = t("products.addToCart");
+        });
+      });
+    }
+
     if (!outOfStock) {
       document.getElementById("modal-add-btn").addEventListener("click", () => {
-        addToCart(p.id);
+        if (usesVariants && !selectedSize) return;
+        addToCart(p.id, 1, selectedSize);
         closeProductModal();
         openDrawer();
       });
@@ -557,6 +598,186 @@
     m.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
   }
+
+  /* ---------- Customer order lookup ---------- */
+  function normalizePhone(p) {
+    return String(p || "").replace(/[\s\-().]/g, "");
+  }
+  function showLookupPane(pane) {
+    const form   = document.getElementById("order-lookup-form");
+    const list   = document.getElementById("order-lookup-list");
+    const result = document.getElementById("order-lookup-result");
+    if (form)   form.style.display   = pane === "form"   ? "" : "none";
+    if (list)   list.style.display   = pane === "list"   ? "" : "none";
+    if (result) result.style.display = pane === "result" ? "" : "none";
+  }
+  function openOrderLookup() {
+    const m = document.getElementById("order-lookup-modal");
+    const form = document.getElementById("order-lookup-form");
+    const err = document.getElementById("lookup-error");
+    if (form) form.reset();
+    if (err) { err.style.display = "none"; err.textContent = ""; }
+    showLookupPane("form");
+    m.classList.add("open");
+    m.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+  }
+  function closeOrderLookup() {
+    const m = document.getElementById("order-lookup-modal");
+    m.classList.remove("open");
+    m.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    state.lookupOrders = [];
+    state.lookupPhone = "";
+    state.lookupOrderId = "";
+  }
+
+  const STATUS_LABELS = {
+    awaiting_verification: "orderLookup.status.awaiting",
+    pending:               "orderLookup.status.pending",
+    accepted:              "orderLookup.status.accepted",
+    shipped:               "orderLookup.status.shipped",
+    completed:             "orderLookup.status.completed",
+    cancelled:             "orderLookup.status.cancelled"
+  };
+  const CANCELLABLE_STATUSES = new Set(["awaiting_verification", "pending"]);
+
+  function renderLookupResult(order) {
+    document.getElementById("lookup-result-id").textContent = order.id || "—";
+    const created = order.createdAt ? new Date(order.createdAt) : null;
+    document.getElementById("lookup-result-date").textContent =
+      created ? created.toLocaleString(state.lang) : "";
+    const statusEl = document.getElementById("lookup-result-status");
+    const statusKey = STATUS_LABELS[order.status] || ("orderLookup.status." + (order.status || "unknown"));
+    statusEl.textContent = t(statusKey) || order.status || "";
+    statusEl.className = "lookup-status status-" + (order.status || "unknown");
+
+    const currency = (order.currency || (settings().currency) || "");
+    const itemsEl = document.getElementById("lookup-result-items");
+    const items = Array.isArray(order.items) ? order.items : [];
+    itemsEl.innerHTML = items.map((i) => {
+      const nm = (i.nameTranslations && (i.nameTranslations[state.lang] || i.nameTranslations.en)) || i.name || "";
+      const suffix = i.size ? ` (${escapeHtml(i.size)})` : "";
+      const line = (Number(i.price) || 0) * (Number(i.qty) || 0);
+      return `<li>
+        <span>${escapeHtml(nm)}${suffix} <span class="q">×${Number(i.qty) || 0}</span></span>
+        <span>${escapeHtml(formatPrice(line, currency))}</span>
+      </li>`;
+    }).join("");
+
+    document.getElementById("lookup-result-total").textContent =
+      formatPrice(Number(order.total) || 0, currency);
+
+    const cancelBtn = document.getElementById("lookup-cancel-btn");
+    const cannotEl = document.getElementById("lookup-cannot-cancel");
+    if (CANCELLABLE_STATUSES.has(order.status)) {
+      cancelBtn.style.display = "";
+      cancelBtn.disabled = false;
+      cancelBtn.dataset.orderId = order.id;
+      cannotEl.style.display = "none";
+    } else {
+      cancelBtn.style.display = "none";
+      cannotEl.style.display = "";
+    }
+  }
+
+  function renderLookupList(orders) {
+    const listEl = document.getElementById("lookup-list-items");
+    const currency = settings().currency || "";
+    if (!orders || orders.length === 0) {
+      listEl.innerHTML = `<li class="lookup-empty">${escapeHtml(t("orderLookup.noOrders") || "No orders found for that phone number.")}</li>`;
+      return;
+    }
+    listEl.innerHTML = orders.map((o, idx) => {
+      const statusKey = STATUS_LABELS[o.status] || ("orderLookup.status." + (o.status || "unknown"));
+      const statusLabel = t(statusKey) || o.status || "";
+      const created = o.createdAt ? new Date(o.createdAt).toLocaleDateString(state.lang) : "";
+      const total = formatPrice(Number(o.total) || 0, o.currency || currency);
+      return `<li>
+        <button type="button" class="lookup-order-btn" data-idx="${idx}">
+          <span class="lookup-order-main">
+            <span class="lookup-id">${escapeHtml(o.id)}</span>
+            <span class="lookup-date">${escapeHtml(created)}</span>
+          </span>
+          <span class="lookup-order-meta">
+            <span class="lookup-status status-${escapeHtml(o.status || "unknown")}">${escapeHtml(statusLabel)}</span>
+            <span class="lookup-order-total">${escapeHtml(total)}</span>
+          </span>
+        </button>
+      </li>`;
+    }).join("");
+  }
+
+  async function lookupOrderHandler(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    const fd = new FormData(form);
+    const phone = normalizePhone(fd.get("phone") || "");
+    const err = document.getElementById("lookup-error");
+    err.style.display = "none";
+    err.textContent = "";
+
+    if (!phone) return;
+
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.prev = submitBtn.textContent; submitBtn.textContent = "…"; }
+
+    try {
+      const orders = await Storage.lookupOrdersForCustomer(phone);
+      state.lookupPhone = phone;
+      state.lookupOrders = Array.isArray(orders) ? orders : [];
+      if (state.lookupOrders.length === 0) {
+        err.textContent = t("orderLookup.notFound") || "No orders found for that phone number.";
+        err.style.display = "";
+      } else if (state.lookupOrders.length === 1) {
+        state.lookupOrderId = state.lookupOrders[0].id;
+        renderLookupResult(state.lookupOrders[0]);
+        showLookupPane("result");
+      } else {
+        renderLookupList(state.lookupOrders);
+        showLookupPane("list");
+      }
+    } catch (e) {
+      err.textContent = t("orderLookup.error") || "Could not look up orders. Please try again.";
+      err.style.display = "";
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("orderLookup.find"); }
+    }
+  }
+
+  function selectLookupOrder(idx) {
+    const order = (state.lookupOrders || [])[idx];
+    if (!order) return;
+    state.lookupOrderId = order.id;
+    renderLookupResult(order);
+    showLookupPane("result");
+  }
+
+  async function cancelLookupOrder() {
+    const btn = document.getElementById("lookup-cancel-btn");
+    const orderId = state.lookupOrderId || btn.dataset.orderId;
+    const phone = state.lookupPhone;
+    if (!orderId || !phone) return;
+    const confirmMsg = t("orderLookup.cancelConfirm") || "Cancel this order? This cannot be undone.";
+    if (!window.confirm(confirmMsg)) return;
+    btn.disabled = true;
+    try {
+      await Storage.cancelOrderForCustomer(orderId, phone);
+      toast(t("orderLookup.cancelSuccess") || "Your order has been cancelled.");
+      const refreshed = await Storage.lookupOrdersForCustomer(phone);
+      state.lookupOrders = Array.isArray(refreshed) ? refreshed : [];
+      const updated = state.lookupOrders.find((o) => o.id === orderId);
+      if (updated) renderLookupResult(updated);
+    } catch (e) {
+      const code = (e && e.message) || "cancel_failed";
+      const msg = code === "cannot_cancel"
+        ? (t("orderLookup.cannotCancel") || "This order can no longer be cancelled.")
+        : (t("orderLookup.error") || "Could not cancel order. Please try again.");
+      toast(msg);
+      btn.disabled = false;
+    }
+  }
+
   async function copyShareLink() {
     const input = document.getElementById("share-link-input");
     const btn = document.getElementById("share-copy-btn");
@@ -576,9 +797,10 @@
 
   /* ---------- Cart ---------- */
   // Cart items carry a snapshot: {id, name, image, price, qty}
-  function snapshotProduct(p, qty) {
+  function snapshotProduct(p, qty, size) {
     return {
       id: p.id,
+      size: size || "",
       name: p.name.en || "",
       nameTranslations: p.name,
       image: (p.images && p.images[0]) || p.image || "",
@@ -587,15 +809,34 @@
     };
   }
 
-  function addToCart(productId, qty = 1) {
+  function cartKey(item) {
+    return item.size ? item.id + "::" + item.size : item.id;
+  }
+  function findCartItem(productId, size) {
+    const s = size || "";
+    return state.cart.find((c) => c.id === productId && (c.size || "") === s);
+  }
+  function availableStock(p, size) {
+    if (hasVariants(p)) {
+      const v = findVariant(p, size);
+      return v ? (Number(v.stock) || 0) : 0;
+    }
+    return Number(p && p.stock) || 0;
+  }
+
+  function addToCart(productId, qty = 1, size = "") {
     const p = products().find((x) => x.id === productId);
     if (!p) return;
-    const stock = Number(p.stock) || 0;
+    if (hasVariants(p) && !size) {
+      toast(t("products.chooseSize") || "Please choose a size");
+      return;
+    }
+    const stock = availableStock(p, size);
     if (stock <= 0) {
       toast(t("products.outOfStock"));
       return;
     }
-    const existing = state.cart.find((c) => c.id === productId);
+    const existing = findCartItem(productId, size);
     const currentQty = existing ? existing.qty : 0;
     if (currentQty + qty > stock) {
       toast((t("cart.stockLimit") || "Only {n} available").replace("{n}", stock));
@@ -603,29 +844,28 @@
     }
     if (existing) {
       existing.qty += qty;
-      // Refresh snapshot fields (price/image/name may have changed)
       existing.name = p.name.en || "";
       existing.nameTranslations = p.name;
       existing.image = (p.images && p.images[0]) || p.image || "";
       existing.price = Number(p.price) || 0;
     } else {
-      state.cart.push(snapshotProduct(p, qty));
+      state.cart.push(snapshotProduct(p, qty, size));
     }
     Storage.saveCart(state.cart);
     updateCartBadge();
     renderCart();
   }
-  function removeFromCart(productId) {
-    state.cart = state.cart.filter((c) => c.id !== productId);
+  function removeFromCart(key) {
+    state.cart = state.cart.filter((c) => cartKey(c) !== key);
     Storage.saveCart(state.cart);
     updateCartBadge();
     renderCart();
   }
-  function setQty(productId, qty) {
-    const item = state.cart.find((c) => c.id === productId);
+  function setQty(key, qty) {
+    const item = state.cart.find((c) => cartKey(c) === key);
     if (!item) return;
-    const p = products().find((x) => x.id === productId);
-    const stock = p ? (Number(p.stock) || 0) : 0;
+    const p = products().find((x) => x.id === item.id);
+    const stock = p ? availableStock(p, item.size) : 0;
     const target = Math.max(1, qty);
     if (p && target > stock) {
       toast((t("cart.stockLimit") || "Only {n} available").replace("{n}", stock));
@@ -686,18 +926,22 @@
       const price = p ? (Number(p.price) || 0) : (Number(i.price) || 0);
       const img = (p && ((p.images && p.images[0]) || p.image)) || i.image || "";
       const lineTotal = price * i.qty;
-      const stock = p ? (Number(p.stock) || 0) : 0;
+      const stock = p ? availableStock(p, i.size) : 0;
       const imgHtml = img
         ? `<img src="${escapeAttr(img)}" alt="${escapeAttr(name)}">`
         : `🌸`;
       const stockWarn = (p && stock < i.qty)
         ? `<div class="cart-item-stockwarn">${escapeHtml((t("cart.stockConflict") || "Only {n} available").replace("{n}", stock))}</div>`
         : "";
+      const sizeLabel = i.size
+        ? `<div class="cart-item-size">${escapeHtml((t("products.size") || "Size") + ": " + i.size)}</div>`
+        : "";
       return `
-        <div class="cart-item" data-id="${escapeAttr(i.id)}">
+        <div class="cart-item" data-key="${escapeAttr(cartKey(i))}">
           <div class="cart-item-img">${imgHtml}</div>
           <div>
             <div class="cart-item-name">${escapeHtml(name)}</div>
+            ${sizeLabel}
             <div class="cart-item-price">${escapeHtml(formatPrice(price))}</div>
             ${stockWarn}
             <div class="qty-group">
@@ -715,11 +959,12 @@
     }).join("");
 
     body.querySelectorAll(".cart-item").forEach((row) => {
-      const id = row.getAttribute("data-id");
-      const item = state.cart.find((c) => c.id === id);
-      row.querySelector('[data-action="dec"]').addEventListener("click", () => setQty(id, item.qty - 1));
-      row.querySelector('[data-action="inc"]').addEventListener("click", () => setQty(id, item.qty + 1));
-      row.querySelector('[data-action="remove"]').addEventListener("click", () => removeFromCart(id));
+      const key = row.getAttribute("data-key");
+      const item = state.cart.find((c) => cartKey(c) === key);
+      if (!item) return;
+      row.querySelector('[data-action="dec"]').addEventListener("click", () => setQty(key, item.qty - 1));
+      row.querySelector('[data-action="inc"]').addEventListener("click", () => setQty(key, item.qty + 1));
+      row.querySelector('[data-action="remove"]').addEventListener("click", () => removeFromCart(key));
     });
 
     footer.style.display = "block";
@@ -750,7 +995,8 @@
       const name = (p && (p.name[state.lang] || p.name.en)) || i.name || "";
       const price = p ? (Number(p.price) || 0) : (Number(i.price) || 0);
       const line = price * i.qty;
-      return `<li><span>${escapeHtml(name)} × ${i.qty}</span><span>${escapeHtml(formatPrice(line))}</span></li>`;
+      const suffix = i.size ? ` (${escapeHtml(i.size)})` : "";
+      return `<li><span>${escapeHtml(name)}${suffix} × ${i.qty}</span><span>${escapeHtml(formatPrice(line))}</span></li>`;
     }).join("");
     document.getElementById("checkout-total").textContent = formatPrice(cartTotal());
 
@@ -813,6 +1059,7 @@
     const payment = fd.get("payment");
     const name = (fd.get("name") || "").toString().trim();
     const phone = (fd.get("phone") || "").toString().trim();
+    const email = (fd.get("email") || "").toString().trim().toLowerCase();
     const address = (fd.get("address") || "").toString().trim();
     const notes = (fd.get("notes") || "").toString().trim();
 
@@ -825,6 +1072,11 @@
         valid = false;
       }
     });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const input = form.querySelector('[name="email"]');
+      if (input) input.closest(".field").classList.add("error");
+      valid = false;
+    }
     if (payment === "bankily" && !state.proofFile) {
       const upload = document.getElementById("proof-upload");
       upload.closest(".field").classList.add("error");
@@ -851,7 +1103,7 @@
 
     // Re-check stock before attempting decrement
     for (const i of state.cart) {
-      const stock = Number(live[i.id].stock) || 0;
+      const stock = availableStock(live[i.id], i.size);
       if (i.qty > stock) {
         toast((t("cart.stockConflict") || "Only {n} available").replace("{n}", stock));
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
@@ -864,6 +1116,7 @@
       const p = live[i.id];
       return {
         id: p.id,
+        size: i.size || "",
         name: p.name.en || i.name || "",
         nameTranslations: p.name,
         image: (p.images && p.images[0]) || p.image || "",
@@ -891,7 +1144,7 @@
     const order = {
       id: makeOrderId(),
       createdAt: new Date().toISOString(),
-      customer: { name, phone, address, notes },
+      customer: { name, phone, email, address, notes },
       payment: { method: payment, proofPath: proofPath || "" },
       items: orderItems,
       total,
@@ -902,7 +1155,7 @@
 
     // Atomically decrement stock BEFORE writing the order
     try {
-      await Storage.decrementStock(orderItems.map((i) => ({ id: i.id, qty: i.qty })));
+      await Storage.decrementStock(orderItems.map((i) => ({ id: i.id, qty: i.qty, size: i.size || "" })));
     } catch (err) {
       console.error("decrement failed", err);
       // Clean up the uploaded proof if we won't use it
@@ -928,7 +1181,7 @@
     } catch (err) {
       console.error("addOrder failed", err);
       try {
-        await Storage.restockItems(orderItems.map((i) => ({ id: i.id, qty: i.qty })));
+        await Storage.restockItems(orderItems.map((i) => ({ id: i.id, qty: i.qty, size: i.size || "" })));
       } catch (e) { /* ignore */ }
       if (proofPath) {
         try { await Storage.deleteImage("proofs", proofPath); } catch (e) { /* ignore */ }
@@ -966,7 +1219,7 @@
       order.customer.notes ? `${t("checkout.notes")}: ${order.customer.notes}` : null,
       ``,
       `${t("checkout.summary")}:`,
-      ...order.items.map((i) => `• ${(i.nameTranslations && i.nameTranslations[order.lang]) || i.name} × ${i.qty} — ${formatPrice(i.lineTotal)}`),
+      ...order.items.map((i) => `• ${(i.nameTranslations && i.nameTranslations[order.lang]) || i.name}${i.size ? ` (${i.size})` : ""} × ${i.qty} — ${formatPrice(i.lineTotal)}`),
       ``,
       `${t("cart.total")}: ${formatPrice(order.total)}`,
       `${t("checkout.payment")}: ${order.payment.method === "bankily" ? t("checkout.pay.bankily") : t("checkout.pay.cod")}`
@@ -1060,12 +1313,35 @@
     document.querySelectorAll("[data-close-checkout]").forEach((el) => el.addEventListener("click", closeCheckout));
     document.querySelectorAll("[data-close-confirm]").forEach((el) => el.addEventListener("click", closeConfirm));
     document.querySelectorAll("[data-close-share]").forEach((el) => el.addEventListener("click", closeShareModal));
+    document.querySelectorAll("[data-close-lookup]").forEach((el) => el.addEventListener("click", closeOrderLookup));
     const shareCopyBtn = document.getElementById("share-copy-btn");
     if (shareCopyBtn) shareCopyBtn.addEventListener("click", copyShareLink);
 
+    // Order lookup
+    const myOrderBtn = document.getElementById("my-order-button");
+    if (myOrderBtn) myOrderBtn.addEventListener("click", openOrderLookup);
+    const lookupForm = document.getElementById("order-lookup-form");
+    if (lookupForm) lookupForm.addEventListener("submit", lookupOrderHandler);
+    const lookupBackBtn = document.getElementById("lookup-back-btn");
+    if (lookupBackBtn) lookupBackBtn.addEventListener("click", () => {
+      if ((state.lookupOrders || []).length > 1) showLookupPane("list");
+      else showLookupPane("form");
+    });
+    const lookupListBackBtn = document.getElementById("lookup-list-back-btn");
+    if (lookupListBackBtn) lookupListBackBtn.addEventListener("click", () => showLookupPane("form"));
+    const lookupListItems = document.getElementById("lookup-list-items");
+    if (lookupListItems) lookupListItems.addEventListener("click", (e) => {
+      const btn = e.target.closest(".lookup-order-btn");
+      if (!btn) return;
+      const idx = Number(btn.dataset.idx);
+      if (Number.isInteger(idx)) selectLookupOrder(idx);
+    });
+    const lookupCancelBtn = document.getElementById("lookup-cancel-btn");
+    if (lookupCancelBtn) lookupCancelBtn.addEventListener("click", cancelLookupOrder);
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        closeProductModal(); closeDrawer(); closeCheckout(); closeConfirm(); closeShareModal();
+        closeProductModal(); closeDrawer(); closeCheckout(); closeConfirm(); closeShareModal(); closeOrderLookup();
       }
     });
 

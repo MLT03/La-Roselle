@@ -31,6 +31,13 @@
         <button data-lang="ar">ع</button>
       </div>
 
+      <button id="my-order-button" class="cart-btn" aria-label="My order" data-i18n-title="account.myOrder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="4"/>
+          <path d="M4 21 a8 8 0 0 1 16 0"/>
+        </svg>
+      </button>
+
       <button id="cart-button" class="cart-btn" aria-label="Cart">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M6 2 L3 6 V20 a2 2 0 0 0 2 2 h14 a2 2 0 0 0 2 -2 V6 L18 2z"/>
@@ -246,6 +253,11 @@
           </div>
         </div>
         <div class="field">
+          <label><span data-i18n="checkout.email">Email</span> <span class="field-hint" data-i18n="checkout.emailOptional">(optional — for order status updates)</span></label>
+          <input type="email" name="email" autocomplete="email" />
+          <div class="error-msg" data-i18n="checkout.emailInvalid">Please enter a valid email</div>
+        </div>
+        <div class="field">
           <label data-i18n="checkout.address">Delivery address</label>
           <input type="text" name="address" required />
           <div class="error-msg" data-i18n="checkout.required">This field is required</div>
@@ -319,6 +331,60 @@
             <span data-i18n="confirm.sendWhatsapp">Send this order on WhatsApp</span>
           </a>
           <button class="btn-ghost" data-close-confirm data-i18n="confirm.close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer order lookup modal -->
+  <div id="order-lookup-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-lookup></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close-lookup aria-label="Close">&times;</button>
+      <div class="lookup-body">
+        <h3 data-i18n="orderLookup.title">Find your order</h3>
+        <p class="subtitle" data-i18n="orderLookup.subtitle">Enter the phone number you used at checkout to view or cancel your orders.</p>
+
+        <form id="order-lookup-form" class="checkout-form" novalidate>
+          <div class="field">
+            <label data-i18n="orderLookup.phone">Phone number</label>
+            <input type="tel" name="phone" required autocomplete="tel" />
+          </div>
+          <div class="error-msg" id="lookup-error" style="display:none;"></div>
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" data-close-lookup data-i18n="orderLookup.close">Close</button>
+            <button type="submit" class="btn" data-i18n="orderLookup.find">Find my orders</button>
+          </div>
+        </form>
+
+        <div id="order-lookup-list" class="lookup-list" style="display:none;">
+          <p class="subtitle" data-i18n="orderLookup.selectOrder">Select an order to view details:</p>
+          <ul id="lookup-list-items" class="lookup-order-list"></ul>
+          <div class="form-actions" style="margin-top:1rem;">
+            <button type="button" class="btn-ghost" id="lookup-list-back-btn" data-i18n="orderLookup.back">Back</button>
+          </div>
+        </div>
+
+        <div id="order-lookup-result" class="lookup-result" style="display:none;">
+          <div class="lookup-head">
+            <div>
+              <div class="lookup-id" id="lookup-result-id">—</div>
+              <div class="lookup-date" id="lookup-result-date">—</div>
+            </div>
+            <span class="lookup-status" id="lookup-result-status">—</span>
+          </div>
+          <ul id="lookup-result-items" class="lookup-items"></ul>
+          <div class="sum-total">
+            <span data-i18n="cart.total">Total</span>
+            <span id="lookup-result-total">0</span>
+          </div>
+          <div class="form-actions" style="margin-top:1rem;">
+            <button type="button" class="btn-ghost" id="lookup-back-btn" data-i18n="orderLookup.back">Back</button>
+            <button type="button" class="btn btn-danger" id="lookup-cancel-btn" data-i18n="orderLookup.cancelOrder">Cancel order</button>
+          </div>
+          <p class="lookup-hint" id="lookup-cannot-cancel" style="display:none;" data-i18n="orderLookup.cannotCancel">
+            This order can no longer be cancelled — please contact us on WhatsApp.
+          </p>
         </div>
       </div>
     </div>

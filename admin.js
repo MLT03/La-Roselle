@@ -448,7 +448,9 @@
       form.querySelector('[name="id"]').value = p.id;
       form.querySelector('[name="id"]').readOnly = true;
       form.querySelector('[name="price"]').value = p.price;
-      form.querySelector('[name="stock"]').value = p.stock;
+      const pt = p.productType || (Array.isArray(p.variants) && p.variants.length ? "shoes" : "standard");
+      form.querySelector('[name="productType"]').value = pt;
+      form.querySelector('[name="stock"]').value = p.stock != null ? p.stock : 0;
       form.querySelector('[name="name_en"]').value = p.name.en || "";
       form.querySelector('[name="name_fr"]').value = p.name.fr || "";
       form.querySelector('[name="name_ar"]').value = p.name.ar || "";
@@ -460,12 +462,15 @@
       form.querySelector('[name="description_ar"]').value = p.description.ar || "";
       state.editorImages = (p.images || []).slice();
       state.editorOriginalImages = (p.images || []).slice();
+      renderVariantsEditor(pt, Array.isArray(p.variants) ? p.variants : []);
     } else {
       state.editorMode = "new";
       state.editorProductId = null;
       document.getElementById("editor-title").textContent = "New product";
       form.querySelector('[name="id"]').readOnly = false;
+      form.querySelector('[name="productType"]').value = "standard";
       form.querySelector('[name="stock"]').value = 0;
+      renderVariantsEditor("standard", []);
     }
 
     renderEditorGallery();
@@ -573,13 +578,62 @@
     });
   }
 
+  function renderVariantsEditor(productType, existingVariants) {
+    const stockField    = document.getElementById("stock-field");
+    const variantsField = document.getElementById("variants-field");
+    const grid          = document.getElementById("variants-grid");
+    const totalEl       = document.getElementById("variants-total");
+    const sizes = SIZE_PRESETS[productType];
+    if (!sizes) {
+      stockField.style.display = "";
+      variantsField.style.display = "none";
+      grid.innerHTML = "";
+      return;
+    }
+    stockField.style.display = "none";
+    variantsField.style.display = "";
+    const stockBySize = Object.fromEntries((existingVariants || []).map((v) => [String(v.size), Number(v.stock) || 0]));
+    grid.innerHTML = sizes.map((s) => `
+      <label class="variant-row">
+        <span class="variant-size">${escapeHtml(s)}</span>
+        <input type="number" class="variant-stock" data-size="${escapeAttr(s)}" min="0" step="1" value="${stockBySize[s] || 0}" />
+      </label>
+    `).join("");
+    const updateTotal = () => {
+      const total = Array.from(grid.querySelectorAll(".variant-stock"))
+        .reduce((sum, inp) => sum + (Math.max(0, Math.floor(Number(inp.value) || 0))), 0);
+      totalEl.textContent = "Total: " + total;
+    };
+    grid.querySelectorAll(".variant-stock").forEach((inp) => inp.addEventListener("input", updateTotal));
+    updateTotal();
+  }
+
+  function readVariantsFromForm() {
+    const out = [];
+    document.querySelectorAll("#variants-grid .variant-stock").forEach((inp) => {
+      const size = inp.getAttribute("data-size");
+      const stock = Math.max(0, Math.floor(Number(inp.value) || 0));
+      if (stock > 0) out.push({ size, stock });
+    });
+    return out;
+  }
+
   async function saveProduct(ev) {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     const id = (fd.get("id") || "").toString().trim();
     const price = Number(fd.get("price") || 0);
-    const stock = Math.max(0, Math.floor(Number(fd.get("stock") || 0)));
+    const productType = (fd.get("productType") || "standard").toString();
+    const usesVariants = productType === "shoes" || productType === "clothes";
+    const variants = usesVariants ? readVariantsFromForm() : [];
+    const stock = usesVariants
+      ? variants.reduce((s, v) => s + v.stock, 0)
+      : Math.max(0, Math.floor(Number(fd.get("stock") || 0)));
     if (!id) return;
+    if (usesVariants && variants.length === 0) {
+      alert("Add stock for at least one size.");
+      return;
+    }
 
     const list = await Storage.getProducts();
     if (state.editorMode === "new" && list.some((x) => x.id === id)) {
@@ -593,6 +647,8 @@
       image: state.editorImages[0] || "",
       price,
       stock,
+      productType,
+      variants,
       category: {
         en: (fd.get("category_en") || "").toString().trim(),
         fr: (fd.get("category_fr") || fd.get("category_en") || "").toString().trim(),
@@ -729,7 +785,7 @@
     if (!o) return;
     const when = new Date(o.createdAt).toLocaleString();
     const itemsHtml = (o.items || []).map((i) =>
-      `<li><span>${escapeHtml(i.name)} × ${i.qty}</span><span>${escapeHtml(formatPriceWithCurrency(i.lineTotal, o.currency))}</span></li>`
+      `<li><span>${escapeHtml(i.name)}${i.size ? ` (${escapeHtml(i.size)})` : ""} × ${i.qty}</span><span>${escapeHtml(formatPriceWithCurrency(i.lineTotal, o.currency))}</span></li>`
     ).join("");
 
     const statusOptions = STATUSES.map((s) =>
@@ -810,7 +866,7 @@
       try {
         if (newStatus === "cancelled" && oldStatus !== "cancelled") {
           if (confirm("Cancelling this order will add its items back to stock. Continue?")) {
-            const items = (o.items || []).map((i) => ({ id: i.id, qty: Number(i.qty) || 0 }));
+            const items = (o.items || []).map((i) => ({ id: i.id, qty: Number(i.qty) || 0, size: i.size || "" }));
             try { await Storage.restockItems(items); } catch (e) { console.error(e); }
           } else {
             return;
@@ -818,7 +874,7 @@
         } else if (oldStatus === "cancelled" && newStatus !== "cancelled") {
           // Re-decrement — may fail if stock ran out meanwhile
           try {
-            const items = (o.items || []).map((i) => ({ id: i.id, qty: Number(i.qty) || 0 }));
+            const items = (o.items || []).map((i) => ({ id: i.id, qty: Number(i.qty) || 0, size: i.size || "" }));
             await Storage.decrementStock(items);
           } catch (e) {
             alert("Couldn't re-activate this order: " + (e.productId ? `stock for ${e.productId} is insufficient.` : e.message));
@@ -1190,16 +1246,16 @@
 
   /* ============ Init ============ */
   document.addEventListener("DOMContentLoaded", async () => {
-    console.log("[admin] DOMContentLoaded");
-    // Auth state
-    console.log("[admin] before getSession");
-    const session = await Storage.getSession();
-    console.log("[admin] after getSession", !!session);
-    if (session) await showApp(); else showLogin();
-    console.log("[admin] after first show");
+    // Show the login screen immediately so the form is usable even if
+    // initial auth checks are slow.
+    showLogin();
+
+    // Then reconcile with any existing session in the background.
+    Storage.getSession().then((session) => {
+      if (session) showApp().catch(console.error);
+    }).catch(console.error);
 
     sb.auth.onAuthStateChange((_e, s) => {
-      console.log("[admin] authChange", _e, !!s);
       if (s) { showApp().catch(console.error); }
       else { showLogin(); }
     });
@@ -1245,6 +1301,10 @@
     document.querySelectorAll("#product-editor .lang-tab").forEach((b) =>
       b.addEventListener("click", () => switchEditorLang(b.dataset.lang)));
     document.getElementById("product-form").addEventListener("submit", saveProduct);
+    const productTypeSelect = document.querySelector('#product-form [name="productType"]');
+    if (productTypeSelect) productTypeSelect.addEventListener("change", (e) => {
+      renderVariantsEditor(e.target.value, []);
+    });
 
     // Orders
     document.querySelectorAll("[data-close-order]").forEach((el) => el.addEventListener("click", closeOrder));

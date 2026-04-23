@@ -28,6 +28,33 @@ const STORAGE_KEYS = {
   theme:    "laroselle.theme"
 };
 
+/* ---------- Product types + size presets ----------
+ * "standard" products use a single `stock` number.
+ * "shoes" and "clothes" use a `variants` array: [{ size, stock }, ...]
+ */
+const PRODUCT_TYPES = ["standard", "shoes", "clothes"];
+const SIZE_PRESETS = {
+  shoes:   ["36","37","38","39","40","41","42","43","44"],
+  clothes: ["XS","S","M","L","XL","XXL"]
+};
+function hasVariants(p) {
+  return p && Array.isArray(p.variants) && p.variants.length > 0;
+}
+function totalVariantStock(p) {
+  if (!hasVariants(p)) return Number(p && p.stock) || 0;
+  return p.variants.reduce((s, v) => s + (Number(v.stock) || 0), 0);
+}
+function findVariant(p, size) {
+  if (!hasVariants(p)) return null;
+  const s = String(size || "");
+  return p.variants.find((v) => String(v.size) === s) || null;
+}
+window.PRODUCT_TYPES = PRODUCT_TYPES;
+window.SIZE_PRESETS = SIZE_PRESETS;
+window.hasVariants = hasVariants;
+window.totalVariantStock = totalVariantStock;
+window.findVariant = findVariant;
+
 const DEFAULT_SETTINGS = {
   shopName: "La Roselle",
   currency: "MRU",
@@ -116,6 +143,12 @@ const BUCKETS = {
 function productFromRow(row) {
   const d = row.data || {};
   const images = Array.isArray(d.images) ? d.images : (d.image ? [d.image] : []);
+  const productType = PRODUCT_TYPES.includes(d.productType) ? d.productType : "standard";
+  const variants = Array.isArray(d.variants)
+    ? d.variants
+        .filter((v) => v && v.size != null)
+        .map((v) => ({ size: String(v.size), stock: Math.max(0, Math.floor(Number(v.stock) || 0)) }))
+    : [];
   return {
     id: row.id,
     price: Number(d.price) || 0,
@@ -125,13 +158,24 @@ function productFromRow(row) {
     name:     d.name     || { en: "", fr: "", ar: "" },
     description: d.description || { en: "", fr: "", ar: "" },
     stock: Number(row.stock) || 0,
+    productType,
+    variants,
     sort_order: Number(row.sort_order) || 0
   };
 }
 function productToRow(p) {
+  const productType = PRODUCT_TYPES.includes(p.productType) ? p.productType : "standard";
+  const variants = (productType !== "standard" && Array.isArray(p.variants))
+    ? p.variants
+        .filter((v) => v && v.size != null)
+        .map((v) => ({ size: String(v.size), stock: Math.max(0, Math.floor(Number(v.stock) || 0)) }))
+    : [];
+  const flatStock = productType === "standard"
+    ? Math.max(0, Math.floor(Number(p.stock) || 0))
+    : variants.reduce((s, v) => s + v.stock, 0);
   return {
     id: p.id,
-    stock: Math.max(0, Math.floor(Number(p.stock) || 0)),
+    stock: flatStock,
     sort_order: Number(p.sort_order) || 0,
     data: {
       price: Number(p.price) || 0,
@@ -139,7 +183,9 @@ function productToRow(p) {
       image: (Array.isArray(p.images) && p.images[0]) || p.image || "",
       category: p.category || { en: "", fr: "", ar: "" },
       name:     p.name     || { en: "", fr: "", ar: "" },
-      description: p.description || { en: "", fr: "", ar: "" }
+      description: p.description || { en: "", fr: "", ar: "" },
+      productType,
+      variants
     }
   };
 }
@@ -326,6 +372,33 @@ const Storage = {
   async deleteOrder(id) {
     const { error } = await sb.from("orders").delete().eq("id", id);
     if (error) { console.error("deleteOrder", error); throw error; }
+  },
+
+  async lookupOrdersForCustomer(phone) {
+    const { data, error } = await sb.rpc("get_orders_for_customer", {
+      p_phone: phone
+    });
+    if (error) {
+      console.error("lookupOrdersForCustomer", error);
+      throw new Error("lookup_failed");
+    }
+    return Array.isArray(data) ? data : [];
+  },
+
+  async cancelOrderForCustomer(orderId, phone) {
+    const { data, error } = await sb.rpc("cancel_order_for_customer", {
+      p_id: orderId,
+      p_phone: phone
+    });
+    if (error) {
+      const msg = (error.message || "").toString();
+      let code = "cancel_failed";
+      if (msg.includes("not_found")) code = "not_found";
+      else if (msg.includes("cannot_cancel")) code = "cannot_cancel";
+      const e = new Error(code);
+      throw e;
+    }
+    return data;
   },
 
   /* ---------- Settings ---------- */

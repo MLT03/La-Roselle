@@ -790,3 +790,40 @@
   }
   .order-row .order-info { grid-column: span 2; }
 }
+
+/* ---------- Variants editor ---------- */
+.variants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: .55rem;
+}
+.variant-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem .7rem;
+  border: 1px solid var(--blush-100, #f1e5e1);
+  border-radius: 10px;
+  background: var(--blush-50, #fbf5f3);
+}
+.variant-size {
+  font-weight: 600;
+  min-width: 2ch;
+  color: var(--ink, #2b1e1e);
+}
+.variant-stock {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: .35rem .5rem;
+  border: 1px solid var(--blush-100, #f1e5e1);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.variants-total {
+  margin-top: .75rem;
+  font-weight: 600;
+  color: var(--ink, #2b1e1e);
+  text-align: end;
+}

@@ -1600,3 +1600,211 @@ html[dir="rtl"] .drawer-panel {
   .search-wrap { max-width: none; flex: 1 1 100%; }
   .carousel-arrow { width: 34px; height: 34px; }
 }
+
+/* ---------- Order lookup modal ---------- */
+.lookup-body {
+  padding: 2rem 2.3rem 2.3rem;
+}
+.lookup-body h3 {
+  font-family: var(--font-display, serif);
+  font-size: 1.6rem;
+  margin: 0 0 .4rem;
+  color: var(--ink, #2b1e1e);
+}
+.lookup-body .subtitle {
+  color: var(--ink-soft, #6b5c5c);
+  font-size: .92rem;
+  margin: 0 0 1.4rem;
+  line-height: 1.5;
+}
+.lookup-result {
+  margin-top: .5rem;
+}
+.lookup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  background: var(--blush-50, #fbf5f3);
+  border-radius: 14px;
+  margin-bottom: 1rem;
+}
+.lookup-id {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ink, #2b1e1e);
+}
+.lookup-date {
+  font-size: .82rem;
+  color: var(--ink-soft, #6b5c5c);
+  margin-top: .2rem;
+}
+.lookup-status {
+  display: inline-block;
+  padding: .35rem .75rem;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+  background: #eee;
+  color: #444;
+  white-space: nowrap;
+}
+.lookup-status.status-awaiting_verification { background: #fef0d9; color: #a86400; }
+.lookup-status.status-pending { background: #e3edfb; color: #2a5aa0; }
+.lookup-status.status-accepted { background: #e0f2e0; color: #2d6a2d; }
+.lookup-status.status-shipped { background: #dde8ff; color: #1f3d8a; }
+.lookup-status.status-completed { background: #d4ebd4; color: #1f5a1f; }
+.lookup-status.status-cancelled { background: #f4dede; color: #8a2323; }
+.lookup-items {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  border-top: 1px solid var(--blush-100, #f1e5e1);
+}
+.lookup-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--blush-100, #f1e5e1);
+  font-size: .92rem;
+}
+.lookup-items .q {
+  color: var(--ink-soft, #6b5c5c);
+  font-size: .85rem;
+}
+.lookup-result .sum-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: .5rem 0 1rem;
+  color: var(--ink, #2b1e1e);
+}
+.lookup-hint {
+  margin: .75rem 0 0;
+  font-size: .85rem;
+  color: var(--ink-soft, #6b5c5c);
+  text-align: center;
+  font-style: italic;
+}
+.field-hint {
+  font-size: .8rem;
+  color: var(--ink-soft, #6b5c5c);
+  font-weight: 400;
+  margin-left: .3rem;
+}
+.size-picker {
+  margin: 1.2rem auto 0;
+  max-width: 360px;
+  text-align: center;
+}
+.size-label {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--ink-soft, #6b5c5c);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: .6rem;
+}
+.size-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .4rem;
+}
+.size-opt {
+  min-width: 2.6rem;
+  padding: .5rem .75rem;
+  background: #fff;
+  color: var(--ink, #2b1e1e);
+  border: 1.5px solid var(--blush-100, #f1e5e1);
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .15s ease, background .15s ease, border-color .15s ease;
+}
+.size-opt:hover:not(.unavailable) {
+  border-color: var(--ink, #2b1e1e);
+  transform: translateY(-1px);
+}
+.size-opt.selected {
+  background: var(--ink, #2b1e1e);
+  color: #fff;
+  border-color: var(--ink, #2b1e1e);
+}
+.size-opt.unavailable {
+  color: #bbb;
+  background: #f7f4f2;
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+.cart-item-size {
+  font-size: .82rem;
+  color: var(--ink-soft, #6b5c5c);
+  margin: .1rem 0 .3rem;
+}
+.lookup-order-list {
+  list-style: none;
+  padding: 0;
+  margin: .75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+}
+.lookup-order-list li { margin: 0; }
+.lookup-order-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: .9rem 1.1rem;
+  background: var(--blush-50, #fbf5f3);
+  border: 1px solid var(--blush-100, #f1e5e1);
+  border-radius: 14px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: transform .15s ease, background .15s ease;
+}
+.lookup-order-btn:hover {
+  background: var(--blush-100, #f1e5e1);
+  transform: translateY(-1px);
+}
+.lookup-order-main {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+}
+.lookup-order-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .3rem;
+}
+.lookup-order-total {
+  font-weight: 600;
+  color: var(--ink, #2b1e1e);
+}
+.lookup-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--ink-soft, #6b5c5c);
+  font-style: italic;
+}
+.btn-danger {
+  background: #a83232;
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover:not(:disabled) { background: #8a2323; }
+.btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+
+@media (max-width: 520px) {
+  .lookup-body { padding: 1.5rem 1.2rem 1.6rem; }
+  .lookup-head { flex-direction: column; align-items: flex-start; }
+}
