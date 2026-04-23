@@ -263,20 +263,23 @@ const Storage = {
 
   async decrementStock(items) {
     // items: [{id, qty}, ...] — atomic via RPC
-    const { error } = await sb.rpc("decrement_stock", { items });
+    const { error } = await sb.rpc("decrement_stock", { p_items: items });
     if (error) {
       const msg = (error.message || "").toString();
-      const m = msg.match(/insufficient_stock:(\S+)/);
-      const productId = m ? m[1] : null;
-      const e = new Error("insufficient_stock");
-      e.productId = productId;
+      const m = msg.match(/stock_conflict:([^:]+):(\d+):(\d+)/);
+      const e = new Error("stock_conflict");
+      if (m) {
+        e.productId = m[1];
+        e.available = Number(m[2]);
+        e.requested = Number(m[3]);
+      }
       throw e;
     }
     await Storage.getProducts();
   },
 
   async restockItems(items) {
-    const { error } = await sb.rpc("restock_items", { items });
+    const { error } = await sb.rpc("restock_items", { p_items: items });
     if (error) { console.error("restockItems", error); throw error; }
     await Storage.getProducts();
   },

@@ -910,9 +910,11 @@
         try { await Storage.deleteImage("proofs", proofPath); } catch (e) { /* ignore */ }
       }
       const pid = err && err.productId;
+      const available = err && err.available != null ? err.available : 0;
       const p = pid ? live[pid] : null;
       const nm = p ? (p.name[state.lang] || p.name.en) : "";
-      toast((t("cart.stockConflict") || "Only available") + (nm ? ` — ${nm}` : ""));
+      const msg = (t("cart.stockConflict") || "Only {n} available").replace("{n}", available);
+      toast(msg + (nm ? ` — ${nm}` : ""));
       await Storage.getProducts();
       renderProducts();
       renderCart();
