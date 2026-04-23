@@ -22,13 +22,17 @@
       </div>
       <form id="login-form">
         <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" autocomplete="email" required />
+        </div>
+        <div class="field">
           <label>Password</label>
           <input type="password" id="login-password" autocomplete="current-password" required />
-          <div class="error-msg" id="login-error">Incorrect password.</div>
+          <div class="error-msg" id="login-error">Incorrect email or password.</div>
         </div>
         <button class="btn" type="submit" style="width:100%; justify-content:center;">Sign in</button>
       </form>
-      <p class="login-hint">Default password on first use: <code>laroselle</code><br/>(Change it from Settings after you sign in.)</p>
+      <p class="login-hint">Sign in with your Supabase admin account.</p>
       <a href="index.html" class="login-back">← Back to shop</a>
     </div>
   </div>
@@ -42,8 +46,13 @@
           <span class="brand-tag">Admin</span>
         </a>
         <nav class="admin-tabs">
-          <button class="tab-btn active" data-tab="products">Products</button>
-          <button class="tab-btn" data-tab="orders">Orders <span id="orders-badge" class="badge hidden">0</span></button>
+          <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+          <button class="tab-btn" data-tab="products">Products</button>
+          <button class="tab-btn" data-tab="orders">
+            Orders
+            <span id="orders-badge" class="badge hidden">0</span>
+            <span id="new-order-pulse" class="new-order-pulse" aria-hidden="true"></span>
+          </button>
           <button class="tab-btn" data-tab="content">Content</button>
           <button class="tab-btn" data-tab="appearance">Appearance</button>
           <button class="tab-btn" data-tab="settings">Settings</button>
@@ -56,17 +65,21 @@
     </header>
 
     <main class="admin-main">
+      <!-- ======== DASHBOARD TAB ======== -->
+      <section class="tab-panel active" data-panel="dashboard" id="dashboard-panel"></section>
+
       <!-- ======== PRODUCTS TAB ======== -->
-      <section class="tab-panel active" data-panel="products">
+      <section class="tab-panel" data-panel="products">
         <div class="panel-head">
           <div>
             <h2>Products</h2>
-            <p class="panel-sub">Add, edit, or remove products shown on your shop.</p>
+            <p class="panel-sub">Add, edit, or remove products shown on your shop. Drag cards to reorder.</p>
           </div>
           <div class="panel-head-actions">
             <button class="btn-ghost" id="export-products-btn">⬇ Export</button>
             <button class="btn-ghost" id="import-products-btn">⬆ Import</button>
             <input type="file" id="import-products-input" accept="application/json" hidden />
+            <button class="btn-ghost" id="migrate-local-products-btn" title="Import products from this browser's old localStorage into Supabase">⎘ Import local products</button>
             <button class="btn-ghost danger" id="reset-products-btn">Reset to defaults</button>
             <button class="btn" id="add-product-btn">+ New product</button>
           </div>
@@ -241,7 +254,7 @@
         <div class="panel-head">
           <div>
             <h2>Shop settings</h2>
-            <p class="panel-sub">Configure shop details, payment info, and change your password.</p>
+            <p class="panel-sub">Configure shop details, payment info, and one-time data migration.</p>
           </div>
         </div>
 
@@ -323,24 +336,14 @@
             <button type="submit" class="btn">Save settings</button>
           </form>
 
-          <form id="password-form" class="card">
-            <h3>Change password</h3>
-            <div class="field">
-              <label>Current password</label>
-              <input name="current" type="password" autocomplete="current-password" required />
+          <div class="card">
+            <h3>One-time migration</h3>
+            <p class="panel-sub" style="margin-bottom:1rem;">If you used the older localStorage-based version of this admin on this browser, you can import that data into Supabase now. You only need to do this once — on the device where you had your data.</p>
+            <div style="display:flex; flex-direction:column; gap:.7rem;">
+              <button type="button" class="btn-ghost" id="migrate-local-rest-btn">⎘ Import local settings, content, theme &amp; orders</button>
+              <p class="panel-sub" style="font-size:.72rem;">Products are migrated from the Products tab (button at the top). After running these buttons successfully, the old localStorage keys are cleared.</p>
             </div>
-            <div class="field">
-              <label>New password</label>
-              <input name="next" type="password" minlength="4" autocomplete="new-password" required />
-            </div>
-            <div class="field">
-              <label>Confirm new password</label>
-              <input name="confirm" type="password" autocomplete="new-password" required />
-            </div>
-            <div class="error-msg" id="password-error"></div>
-            <div class="success-msg" id="password-success">Password updated.</div>
-            <button type="submit" class="btn">Update password</button>
-          </form>
+          </div>
         </div>
       </section>
     </main>
@@ -349,18 +352,14 @@
   <!-- Product editor modal -->
   <div id="product-editor" class="modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-editor></div>
-    <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:780px;">
+    <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:820px;">
       <button class="modal-close" data-close-editor aria-label="Close">&times;</button>
       <form id="product-form" class="checkout-form">
         <h3 id="editor-title" style="text-align:center;">New product</h3>
 
         <div class="field">
-          <label>Image</label>
-          <label class="file-upload" id="editor-img-upload">
-            <span id="editor-img-text">Click to upload a product photo</span>
-            <input type="file" accept="image/*" />
-          </label>
-          <img id="editor-img-preview" class="file-preview" alt="" />
+          <label>Images (up to 8 — drag to reorder, the first one is the cover)</label>
+          <div id="editor-gallery" class="editor-gallery"></div>
         </div>
 
         <div class="field-row">
@@ -371,6 +370,10 @@
           <div class="field">
             <label>Price (number)</label>
             <input name="price" type="number" step="0.01" min="0" required />
+          </div>
+          <div class="field">
+            <label>Stock</label>
+            <input name="stock" type="number" step="1" min="0" required />
           </div>
         </div>
 
@@ -416,6 +419,7 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="translations.js"></script>
   <script src="products.js"></script>
   <script src="storage.js"></script>

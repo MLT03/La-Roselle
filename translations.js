@@ -22,6 +22,11 @@ const TRANSLATIONS = {
     "products.addToCart": "Add to cart",
     "products.added": "Added ✓",
     "products.outOfStock": "Out of stock",
+    "products.onlyNLeft": "Only {n} left",
+    "products.photoCount": "{n} photos",
+    "products.search": "Search products…",
+    "products.noMatch": "No products match your search.",
+    "products.clearSearch": "Clear search",
     "products.share": "Share",
     "products.shareTitle": "Share this product",
     "products.linkCopied": "Link copied to clipboard ✓",
@@ -58,6 +63,11 @@ const TRANSLATIONS = {
     "cart.continue": "Continue shopping",
     "cart.itemsOne": "item",
     "cart.itemsMany": "items",
+    "cart.stockLimit": "Only {n} available",
+    "cart.stockConflict": "Only {n} available — please adjust your cart",
+
+    /* Admin (dashboard label, used when content overrides are set) */
+    "admin.dashboard": "Dashboard",
 
     /* Checkout */
     "checkout.title": "Checkout",
@@ -111,6 +121,11 @@ const TRANSLATIONS = {
     "products.addToCart": "Ajouter au panier",
     "products.added": "Ajouté ✓",
     "products.outOfStock": "Rupture de stock",
+    "products.onlyNLeft": "Plus que {n} en stock",
+    "products.photoCount": "{n} photos",
+    "products.search": "Rechercher un produit…",
+    "products.noMatch": "Aucun produit ne correspond à votre recherche.",
+    "products.clearSearch": "Effacer la recherche",
     "products.share": "Partager",
     "products.shareTitle": "Partager ce produit",
     "products.linkCopied": "Lien copié ✓",
@@ -146,6 +161,10 @@ const TRANSLATIONS = {
     "cart.continue": "Continuer mes achats",
     "cart.itemsOne": "article",
     "cart.itemsMany": "articles",
+    "cart.stockLimit": "Seulement {n} disponible(s)",
+    "cart.stockConflict": "Seulement {n} disponible(s) — veuillez ajuster votre panier",
+
+    "admin.dashboard": "Tableau de bord",
 
     "checkout.title": "Commande",
     "checkout.summary": "Récapitulatif",
@@ -197,6 +216,11 @@ const TRANSLATIONS = {
     "products.addToCart": "أضيفي إلى السلة",
     "products.added": "تمت الإضافة ✓",
     "products.outOfStock": "نفد المخزون",
+    "products.onlyNLeft": "تبقّى {n} فقط",
+    "products.photoCount": "{n} صور",
+    "products.search": "ابحثي عن منتج…",
+    "products.noMatch": "لا توجد منتجات تطابق بحثك.",
+    "products.clearSearch": "مسح البحث",
     "products.share": "مشاركة",
     "products.shareTitle": "شارك هذا المنتج",
     "products.linkCopied": "تم نسخ الرابط ✓",
@@ -232,6 +256,10 @@ const TRANSLATIONS = {
     "cart.continue": "متابعة التسوق",
     "cart.itemsOne": "منتج",
     "cart.itemsMany": "منتجات",
+    "cart.stockLimit": "{n} فقط متوفر",
+    "cart.stockConflict": "{n} فقط متوفر — يرجى تعديل سلتك",
+
+    "admin.dashboard": "لوحة التحكم",
 
     "checkout.title": "إتمام الطلب",
     "checkout.summary": "ملخص الطلب",

@@ -1,18 +1,15 @@
 /* ---------- La Roselle — Default product catalog ----------
  *
- * This file provides the *default* product list used when the admin
- * hasn't stored anything yet. Once you add/edit products in the admin
- * panel, the list in the browser's storage takes over.
- *
- * To publish the admin's changes to all visitors: open the admin panel,
- * click "Export products", then replace the array below with the
- * exported JSON and re-deploy.
+ * Used as a fallback when the Supabase `products` table is empty
+ * (e.g. on first boot). Once products exist in Supabase, that data
+ * wins. Use the admin → "Reset to defaults" button to (re-)seed.
  *
  * FIELD REFERENCE:
  *   id          unique string
- *   image       path OR base64 data URL; leave empty for a floral placeholder
+ *   image       cover image URL (legacy — also kept on row for fallback)
+ *   images      array of image URLs (up to 8). First is the cover.
  *   price       NUMBER, e.g. 250  (currency comes from shop settings)
- *   stock       optional integer; omit or set -1 for unlimited
+ *   stock       integer — inventory count
  *   category.{en,fr,ar}
  *   name.{en,fr,ar}
  *   description.{en,fr,ar}
@@ -22,7 +19,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "rose-serum",
     image: "",
+    images: [],
     price: 750,
+    stock: 10,
     category: { en: "Skincare", fr: "Soin du visage", ar: "العناية بالبشرة" },
     name:     { en: "Rose Radiance Serum", fr: "Sérum Éclat de Rose", ar: "سيروم إشراقة الورد" },
     description: {
@@ -34,7 +33,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "lavender-body-oil",
     image: "",
+    images: [],
     price: 600,
+    stock: 10,
     category: { en: "Wellness", fr: "Bien-être", ar: "الرفاهية" },
     name:     { en: "Lavender Body Oil", fr: "Huile Corporelle Lavande", ar: "زيت الجسم بالخزامى" },
     description: {
@@ -46,7 +47,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "intimate-wash",
     image: "",
+    images: [],
     price: 350,
+    stock: 10,
     category: { en: "Intimate care", fr: "Soin intime", ar: "العناية الحميمة" },
     name:     { en: "Gentle Intimate Wash", fr: "Soin Lavant Intime Doux", ar: "غسول حميمي لطيف" },
     description: {
@@ -58,7 +61,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "silk-hair-mask",
     image: "",
+    images: [],
     price: 680,
+    stock: 10,
     category: { en: "Haircare", fr: "Cheveux", ar: "العناية بالشعر" },
     name:     { en: "Silk Repair Hair Mask", fr: "Masque Capillaire Soie Réparateur", ar: "قناع الحرير لإصلاح الشعر" },
     description: {
@@ -70,7 +75,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "rose-mist",
     image: "",
+    images: [],
     price: 450,
+    stock: 10,
     category: { en: "Fragrance", fr: "Parfum", ar: "العطور" },
     name:     { en: "Rose Water Mist", fr: "Brume à l'Eau de Rose", ar: "بخاخ ماء الورد" },
     description: {
@@ -82,7 +89,9 @@ const DEFAULT_PRODUCTS = [
   {
     id: "silk-scrunchie",
     image: "",
+    images: [],
     price: 250,
+    stock: 10,
     category: { en: "Accessories", fr: "Accessoires", ar: "الإكسسوارات" },
     name:     { en: "Silk Scrunchie Set", fr: "Lot de Chouchous en Soie", ar: "طقم ربطات شعر حريرية" },
     description: {

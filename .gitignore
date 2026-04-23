@@ -1,0 +1,5 @@
+.DS_Store
+.Rhistory
+node_modules/
+.env
+.env.local

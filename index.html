@@ -126,11 +126,18 @@
       </div>
 
       <div class="filter-bar">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="product-search" autocomplete="off" placeholder="Search products…" data-i18n-placeholder="products.search" aria-label="Search products" />
+          <button type="button" id="product-search-clear" class="search-clear" aria-label="Clear search" style="display:none;">&times;</button>
+        </div>
+        <div class="filter-spacer"></div>
         <label for="category-filter" data-i18n="products.filter">Filter by category:</label>
         <select id="category-filter"></select>
       </div>
 
       <div id="product-grid" class="product-grid"></div>
+      <p id="products-empty" class="products-empty" style="display:none;" data-i18n="products.noMatch">No products match your search.</p>
     </section>
 
     <!-- ============== ABOUT ============== -->
@@ -327,6 +334,7 @@
     <p>&copy; <span id="year"></span> <em>La Roselle</em>. <span data-i18n="footer.rights">All rights reserved.</span></p>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="translations.js"></script>
   <script src="products.js"></script>
   <script src="storage.js"></script>

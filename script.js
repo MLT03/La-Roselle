@@ -1,16 +1,38 @@
-/* ---------- La Roselle — Customer site logic ---------- */
+/* ---------- La Roselle — Customer site logic (Supabase-backed) ---------- */
 
 (function () {
   const state = {
     lang: localStorage.getItem(STORAGE_KEYS.lang) || "en",
     category: "all",
+    search: "",
     cart: Storage.getCart(),
-    proofDataUrl: ""
+    proofFile: null,              // pending proof upload (File)
+    proofPreviewUrl: "",          // object URL for preview
+    productCarousels: new Map(),  // productId -> { index, images }
+    channels: []
   };
 
   const t = (key) => tText(state.lang, key);
-  const settings = () => Storage.getSettings();
-  const products = () => Storage.getProducts();
+  const settings = () => Storage.getCachedSettings();
+  const products = () => Storage.getCachedProducts();
+
+  /* ---------- Search helpers ---------- */
+  function normalize(s) {
+    return String(s || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
+  }
+  function matchesSearch(p, q) {
+    if (!q) return true;
+    const needle = normalize(q);
+    const fields = [
+      p.name?.en, p.name?.fr, p.name?.ar,
+      p.description?.en, p.description?.fr, p.description?.ar,
+      p.category?.en, p.category?.fr, p.category?.ar
+    ];
+    return fields.some((f) => normalize(f).includes(needle));
+  }
 
   /* ---------- i18n ---------- */
   function applyLanguage(lang) {
@@ -22,6 +44,12 @@
       const key = el.getAttribute("data-i18n");
       const text = tText(lang, key);
       if (text != null && text !== "") el.textContent = text;
+    });
+
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-placeholder");
+      const text = tText(lang, key);
+      if (text != null && text !== "") el.setAttribute("placeholder", text);
     });
 
     document.querySelectorAll(".lang-switch button").forEach((btn) => {
@@ -39,14 +67,12 @@
   /* ---------- Settings sync ---------- */
   function syncSettingsToUi() {
     const s = settings();
-    const theme = Storage.getTheme();
+    const theme = Storage.getCachedTheme();
 
-    // Brand name (shop name is a setting)
     document.querySelectorAll("[data-setting='shopName']").forEach((el) => {
       el.textContent = s.shopName || "La Roselle";
     });
 
-    // Logo image (optional) — replaces the rose SVG decoration
     const brandEl = document.querySelector(".brand");
     if (brandEl) {
       brandEl.classList.toggle("has-logo", !!theme.logoDataUrl);
@@ -57,7 +83,6 @@
       }
     }
 
-    // Hero background image (optional)
     const hero = document.querySelector(".hero");
     if (hero) {
       if (theme.heroImageDataUrl) {
@@ -69,12 +94,10 @@
       }
     }
 
-    // Hero flowers toggle
     document.querySelectorAll(".hero .petal").forEach((el) => {
       el.style.display = s.showHeroFlowers ? "" : "none";
     });
 
-    // Section visibility toggles
     const aboutEl = document.getElementById("about");
     if (aboutEl) aboutEl.style.display = s.showAboutSection ? "" : "none";
     const contactEl = document.getElementById("contact");
@@ -86,30 +109,25 @@
       el.style.display = s.showContactSection ? "" : "none";
     });
 
-    // Language switch — show/hide buttons based on enabled langs
     const langMap = { en: s.langEnEnabled, fr: s.langFrEnabled, ar: s.langArEnabled };
     document.querySelectorAll(".lang-switch button").forEach((btn) => {
       btn.style.display = langMap[btn.dataset.lang] === false ? "none" : "";
     });
 
-    // Bankily details in checkout
     const bName = document.getElementById("bankily-name");
     const bNum = document.getElementById("bankily-number");
     if (bName) bName.textContent = s.bankilyName || "—";
     if (bNum) bNum.textContent = s.bankilyNumber || "—";
 
-    // Payment method toggles
     const bankilyOpt = document.querySelector('.payment-option input[value="bankily"]');
     const codOpt = document.querySelector('.payment-option input[value="cod"]');
     if (bankilyOpt) bankilyOpt.closest(".payment-option").style.display = s.paymentBankilyEnabled ? "" : "none";
     if (codOpt) codOpt.closest(".payment-option").style.display = s.paymentCodEnabled ? "" : "none";
-    // If the default (bankily) is disabled, pick COD
     if (!s.paymentBankilyEnabled && codOpt && bankilyOpt && bankilyOpt.checked) {
       codOpt.checked = true;
       syncPaymentMethod();
     }
 
-    // Contact section
     const email = document.querySelector('a[href^="mailto:"]');
     if (email && s.contactEmail) {
       email.href = `mailto:${s.contactEmail}`;
@@ -120,7 +138,6 @@
     const addrEl = document.querySelector('[data-i18n="contact.addressValue"]');
     if (addrEl && s.contactAddress) addrEl.textContent = s.contactAddress;
 
-    // Social links
     const socials = document.getElementById("socials");
     if (socials) {
       const links = [
@@ -152,7 +169,7 @@
   function getCategories() {
     const set = new Set();
     products().forEach((p) => set.add(p.category[state.lang] || p.category.en));
-    return [...set];
+    return [...set].filter(Boolean);
   }
   function renderCategoryFilter() {
     const select = document.getElementById("category-filter");
@@ -171,55 +188,130 @@
     select.onchange = (e) => { state.category = e.target.value; renderProducts(); };
   }
 
+  /* ---------- Search ---------- */
+  let _searchTimer = null;
+  function bindSearch() {
+    const input = document.getElementById("product-search");
+    const clear = document.getElementById("product-search-clear");
+    if (!input) return;
+    input.addEventListener("input", (e) => {
+      const v = e.target.value;
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => {
+        state.search = v;
+        if (clear) clear.style.display = v ? "" : "none";
+        renderProducts();
+      }, 150);
+    });
+    if (clear) {
+      clear.addEventListener("click", () => {
+        input.value = "";
+        state.search = "";
+        clear.style.display = "none";
+        renderProducts();
+        input.focus();
+      });
+    }
+  }
+
   /* ---------- Products ---------- */
   function renderProducts() {
     const grid = document.getElementById("product-grid");
     if (!grid) return;
     grid.innerHTML = "";
+
     const items = products().filter((p) => {
-      if (state.category === "all") return true;
-      return (p.category[state.lang] || p.category.en) === state.category;
+      if (state.category !== "all") {
+        const catLbl = p.category[state.lang] || p.category.en;
+        if (catLbl !== state.category) return false;
+      }
+      if (state.search && !matchesSearch(p, state.search)) return false;
+      return true;
     });
 
-    items.forEach((p) => {
-      const card = document.createElement("article");
-      card.className = "product-card";
-      card.setAttribute("data-id", p.id);
-
-      const imgWrap = document.createElement("div");
-      imgWrap.className = "product-img" + (p.image ? "" : " placeholder");
-      if (p.image) {
-        const img = document.createElement("img");
-        img.src = p.image;
-        img.alt = p.name[state.lang] || p.name.en;
-        img.loading = "lazy";
-        imgWrap.appendChild(img);
+    const emptyEl = document.getElementById("products-empty");
+    if (items.length === 0) {
+      if (emptyEl) {
+        emptyEl.textContent = state.search ? t("products.noMatch") : t("products.all");
+        emptyEl.style.display = "";
       }
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
 
-      // Share button (top-right corner of the image)
-      const shareBtn = document.createElement("button");
-      shareBtn.type = "button";
-      shareBtn.className = "product-share-btn";
-      shareBtn.setAttribute("aria-label", t("products.share"));
-      shareBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
-      shareBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openShareModal(p);
-      });
-      imgWrap.appendChild(shareBtn);
+    items.forEach((p) => {
+      const card = buildProductCard(p);
+      grid.appendChild(card);
+    });
+  }
 
-      const body = document.createElement("div");
-      body.className = "product-body";
-      body.innerHTML = `
-        <div class="product-category">${escapeHtml(p.category[state.lang] || p.category.en)}</div>
-        <h3 class="product-name">${escapeHtml(p.name[state.lang] || p.name.en)}</h3>
-        <p class="product-desc">${escapeHtml(p.description[state.lang] || p.description.en)}</p>
-        <div class="product-price">${escapeHtml(formatPrice(p.price))}</div>
-      `;
+  function buildProductCard(p) {
+    const card = document.createElement("article");
+    card.className = "product-card";
+    card.setAttribute("data-id", p.id);
 
-      const addBtn = document.createElement("button");
-      addBtn.className = "btn-small";
-      addBtn.type = "button";
+    const imgWrap = document.createElement("div");
+    imgWrap.className = "product-img" + ((p.images && p.images.length) ? "" : " placeholder");
+
+    const imgs = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
+    if (imgs.length > 0) {
+      const img = document.createElement("img");
+      img.src = imgs[0];
+      img.alt = p.name[state.lang] || p.name.en;
+      img.loading = "lazy";
+      img.className = "product-img-main";
+      imgWrap.appendChild(img);
+
+      if (imgs.length > 1) {
+        const badge = document.createElement("div");
+        badge.className = "photo-count-badge";
+        badge.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg> ${imgs.length}`;
+        imgWrap.appendChild(badge);
+      }
+    }
+
+    const outOfStock = (Number(p.stock) || 0) <= 0;
+    const lowStock = !outOfStock && (Number(p.stock) || 0) <= 3;
+    if (outOfStock) {
+      const pill = document.createElement("div");
+      pill.className = "stock-pill out";
+      pill.textContent = t("products.outOfStock");
+      imgWrap.appendChild(pill);
+    } else if (lowStock) {
+      const pill = document.createElement("div");
+      pill.className = "stock-pill low";
+      pill.textContent = (t("products.onlyNLeft") || "Only {n} left").replace("{n}", p.stock);
+      imgWrap.appendChild(pill);
+    }
+
+    const shareBtn = document.createElement("button");
+    shareBtn.type = "button";
+    shareBtn.className = "product-share-btn";
+    shareBtn.setAttribute("aria-label", t("products.share"));
+    shareBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>`;
+    shareBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openShareModal(p);
+    });
+    imgWrap.appendChild(shareBtn);
+
+    const body = document.createElement("div");
+    body.className = "product-body";
+    body.innerHTML = `
+      <div class="product-category">${escapeHtml(p.category[state.lang] || p.category.en)}</div>
+      <h3 class="product-name">${escapeHtml(p.name[state.lang] || p.name.en)}</h3>
+      <p class="product-desc">${escapeHtml(p.description[state.lang] || p.description.en)}</p>
+      <div class="product-price">${escapeHtml(formatPrice(p.price))}</div>
+    `;
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn-small";
+    addBtn.type = "button";
+    if (outOfStock) {
+      addBtn.disabled = true;
+      addBtn.classList.add("disabled");
+      addBtn.textContent = t("products.outOfStock");
+    } else {
       addBtn.textContent = t("products.addToCart");
       addBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -231,36 +323,65 @@
           addBtn.textContent = t("products.addToCart");
         }, 1400);
       });
-      body.appendChild(addBtn);
+    }
+    body.appendChild(addBtn);
 
-      card.appendChild(imgWrap);
-      card.appendChild(body);
-      card.addEventListener("click", () => openProductModal(p));
-      grid.appendChild(card);
-    });
+    card.appendChild(imgWrap);
+    card.appendChild(body);
+    card.addEventListener("click", () => openProductModal(p));
+    return card;
   }
 
-  /* ---------- Product modal ---------- */
+  /* ---------- Product modal (carousel for multiple images) ---------- */
   function openProductModal(p) {
     const modal = document.getElementById("product-modal");
     const body = modal.querySelector(".modal-body");
     const name = p.name[state.lang] || p.name.en;
     const cat  = p.category[state.lang] || p.category.en;
     const desc = p.description[state.lang] || p.description.en;
+    const imgs = (p.images && p.images.length) ? p.images : (p.image ? [p.image] : []);
+    const outOfStock = (Number(p.stock) || 0) <= 0;
+    const lowStock = !outOfStock && (Number(p.stock) || 0) <= 3;
 
-    const imageHtml = p.image
-      ? `<div class="modal-img"><img src="${escapeAttr(p.image)}" alt="${escapeAttr(name)}"></div>`
-      : `<div class="modal-img placeholder"></div>`;
+    let galleryHtml;
+    if (imgs.length === 0) {
+      galleryHtml = `<div class="modal-img placeholder"></div>`;
+    } else if (imgs.length === 1) {
+      galleryHtml = `<div class="modal-img"><img src="${escapeAttr(imgs[0])}" alt="${escapeAttr(name)}"></div>`;
+    } else {
+      const slides = imgs.map((u, i) => `<img class="carousel-slide${i === 0 ? " active" : ""}" src="${escapeAttr(u)}" alt="${escapeAttr(name)} ${i + 1}">`).join("");
+      const dots = imgs.map((_, i) => `<button type="button" class="carousel-dot${i === 0 ? " active" : ""}" data-index="${i}" aria-label="${i + 1}"></button>`).join("");
+      galleryHtml = `
+        <div class="modal-img carousel" data-count="${imgs.length}">
+          <div class="carousel-track">${slides}</div>
+          <button type="button" class="carousel-arrow prev" aria-label="Previous">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button type="button" class="carousel-arrow next" aria-label="Next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <div class="carousel-dots">${dots}</div>
+        </div>
+      `;
+    }
+
+    let stockBadgeHtml = "";
+    if (outOfStock) {
+      stockBadgeHtml = `<div class="modal-stock out">${escapeHtml(t("products.outOfStock"))}</div>`;
+    } else if (lowStock) {
+      stockBadgeHtml = `<div class="modal-stock low">${escapeHtml((t("products.onlyNLeft") || "Only {n} left").replace("{n}", p.stock))}</div>`;
+    }
 
     body.innerHTML = `
-      ${imageHtml}
+      ${galleryHtml}
       <div class="modal-content">
         <div class="modal-category">${escapeHtml(cat)}</div>
         <h3>${escapeHtml(name)}</h3>
         <div class="modal-price">${escapeHtml(formatPrice(p.price))}</div>
+        ${stockBadgeHtml}
         <p class="modal-desc">${escapeHtml(desc)}</p>
         <div style="display:flex; gap:.7rem; justify-content:center; margin-top:1.5rem; flex-wrap:wrap;">
-          <button class="btn" id="modal-add-btn">${escapeHtml(t("products.addToCart"))}</button>
+          <button class="btn" id="modal-add-btn"${outOfStock ? " disabled" : ""}>${escapeHtml(outOfStock ? t("products.outOfStock") : t("products.addToCart"))}</button>
           <button class="btn-ghost" id="modal-share-btn" style="display:inline-flex; align-items:center; gap:.4rem;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
             ${escapeHtml(t("products.share"))}
@@ -268,21 +389,81 @@
         </div>
       </div>
     `;
-    document.getElementById("modal-add-btn").addEventListener("click", () => {
-      addToCart(p.id);
-      closeProductModal();
-      openDrawer();
-    });
+
+    if (!outOfStock) {
+      document.getElementById("modal-add-btn").addEventListener("click", () => {
+        addToCart(p.id);
+        closeProductModal();
+        openDrawer();
+      });
+    }
     document.getElementById("modal-share-btn").addEventListener("click", () => {
       openShareModal(p);
     });
+
+    if (imgs.length > 1) wireCarousel(body.querySelector(".carousel"), imgs.length);
 
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
   }
+
+  function wireCarousel(root, count) {
+    if (!root) return;
+    let index = 0;
+    const slides = root.querySelectorAll(".carousel-slide");
+    const dots = root.querySelectorAll(".carousel-dot");
+
+    const goTo = (i) => {
+      index = ((i % count) + count) % count;
+      slides.forEach((el, j) => el.classList.toggle("active", j === index));
+      dots.forEach((el, j) => el.classList.toggle("active", j === index));
+    };
+
+    root.querySelector(".carousel-arrow.prev").addEventListener("click", (e) => { e.stopPropagation(); goTo(index - 1); });
+    root.querySelector(".carousel-arrow.next").addEventListener("click", (e) => { e.stopPropagation(); goTo(index + 1); });
+    dots.forEach((dot) => dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goTo(Number(dot.dataset.index) || 0);
+    }));
+
+    // Keyboard navigation
+    const keyHandler = (e) => {
+      if (!document.getElementById("product-modal").classList.contains("open")) return;
+      if (e.key === "ArrowLeft") { goTo(index - 1); }
+      else if (e.key === "ArrowRight") { goTo(index + 1); }
+    };
+    document.addEventListener("keydown", keyHandler);
+    root._keyHandler = keyHandler;
+
+    // Touch swipe
+    let startX = 0, deltaX = 0, tracking = false;
+    root.addEventListener("touchstart", (e) => {
+      if (!e.touches[0]) return;
+      tracking = true;
+      startX = e.touches[0].clientX;
+      deltaX = 0;
+    }, { passive: true });
+    root.addEventListener("touchmove", (e) => {
+      if (!tracking || !e.touches[0]) return;
+      deltaX = e.touches[0].clientX - startX;
+    }, { passive: true });
+    root.addEventListener("touchend", () => {
+      if (!tracking) return;
+      tracking = false;
+      if (Math.abs(deltaX) > 40) {
+        if (deltaX < 0) goTo(index + 1);
+        else goTo(index - 1);
+      }
+    });
+  }
+
   function closeProductModal() {
     const modal = document.getElementById("product-modal");
+    const carousel = modal.querySelector(".carousel");
+    if (carousel && carousel._keyHandler) {
+      document.removeEventListener("keydown", carousel._keyHandler);
+    }
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
@@ -290,8 +471,6 @@
 
   /* ---------- Share modal ---------- */
   function buildProductUrl(p) {
-    // Points the link back to the shop with a product anchor.
-    // The anchor is handled in init to auto-open the product modal.
     const base = window.location.origin + window.location.pathname;
     return `${base}#product=${encodeURIComponent(p.id)}`;
   }
@@ -304,7 +483,6 @@
     const shopName = settings().shopName || "La Roselle";
     const shareText = `🌸 ${name} — ${price}\n${desc}\n\n${shopName}`;
 
-    // Preview
     const preview = document.getElementById("share-preview");
     const imgHtml = p.image
       ? `<img src="${escapeAttr(p.image)}" alt="${escapeAttr(name)}">`
@@ -317,49 +495,31 @@
       </div>
     `;
 
-    // Build share buttons
     const encUrl = encodeURIComponent(url);
     const encText = encodeURIComponent(shareText);
     const encTextWithUrl = encodeURIComponent(`${shareText}\n${url}`);
 
     const buttons = [
-      {
-        cls: "wa",
-        label: t("share.whatsapp"),
+      { cls: "wa", label: t("share.whatsapp"),
         href: `https://wa.me/?text=${encTextWithUrl}`,
-        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.888-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.599 5.351l.241.383-1.001 3.656 3.751-.983.002-.106z"/></svg>`
-      },
-      {
-        cls: "fb",
-        label: t("share.facebook"),
+        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.888-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884a9.86 9.86 0 001.599 5.351l.241.383-1.001 3.656 3.751-.983.002-.106z"/></svg>` },
+      { cls: "fb", label: t("share.facebook"),
         href: `https://www.facebook.com/sharer/sharer.php?u=${encUrl}&quote=${encText}`,
-        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 21v-8h2.7l.4-3.1h-3.1V8c0-.9.3-1.5 1.6-1.5h1.7V3.7c-.3 0-1.3-.1-2.5-.1-2.4 0-4.1 1.5-4.1 4.2v2.1H7.5V13h2.7v8h3.3z"/></svg>`
-      },
-      {
-        cls: "tw",
-        label: t("share.twitter"),
+        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 21v-8h2.7l.4-3.1h-3.1V8c0-.9.3-1.5 1.6-1.5h1.7V3.7c-.3 0-1.3-.1-2.5-.1-2.4 0-4.1 1.5-4.1 4.2v2.1H7.5V13h2.7v8h3.3z"/></svg>` },
+      { cls: "tw", label: t("share.twitter"),
         href: `https://twitter.com/intent/tweet?text=${encText}&url=${encUrl}`,
-        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>`
-      },
-      {
-        cls: "tg",
-        label: t("share.telegram"),
+        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>` },
+      { cls: "tg", label: t("share.telegram"),
         href: `https://t.me/share/url?url=${encUrl}&text=${encText}`,
-        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>`
-      },
-      {
-        cls: "em",
-        label: t("share.email"),
+        icon: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>` },
+      { cls: "em", label: t("share.email"),
         href: `mailto:?subject=${encodeURIComponent(name)}&body=${encTextWithUrl}`,
-        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3,7 12,13 21,7"/></svg>`
-      }
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3,7 12,13 21,7"/></svg>` }
     ];
 
     if (navigator.share) {
       buttons.push({
-        cls: "nt",
-        label: t("share.nativeShare"),
-        native: true,
+        cls: "nt", label: t("share.nativeShare"), native: true,
         icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`
       });
     }
@@ -381,13 +541,11 @@
       });
     }
 
-    // Link row
     document.getElementById("share-link-input").value = url;
     const copyBtn = document.getElementById("share-copy-btn");
     copyBtn.classList.remove("copied");
     copyBtn.textContent = t("share.copyLink");
 
-    // Show modal
     const m = document.getElementById("share-modal");
     m.classList.add("open");
     m.setAttribute("aria-hidden", "false");
@@ -417,10 +575,42 @@
   }
 
   /* ---------- Cart ---------- */
+  // Cart items carry a snapshot: {id, name, image, price, qty}
+  function snapshotProduct(p, qty) {
+    return {
+      id: p.id,
+      name: p.name.en || "",
+      nameTranslations: p.name,
+      image: (p.images && p.images[0]) || p.image || "",
+      price: Number(p.price) || 0,
+      qty
+    };
+  }
+
   function addToCart(productId, qty = 1) {
+    const p = products().find((x) => x.id === productId);
+    if (!p) return;
+    const stock = Number(p.stock) || 0;
+    if (stock <= 0) {
+      toast(t("products.outOfStock"));
+      return;
+    }
     const existing = state.cart.find((c) => c.id === productId);
-    if (existing) existing.qty += qty;
-    else state.cart.push({ id: productId, qty });
+    const currentQty = existing ? existing.qty : 0;
+    if (currentQty + qty > stock) {
+      toast((t("cart.stockLimit") || "Only {n} available").replace("{n}", stock));
+      return;
+    }
+    if (existing) {
+      existing.qty += qty;
+      // Refresh snapshot fields (price/image/name may have changed)
+      existing.name = p.name.en || "";
+      existing.nameTranslations = p.name;
+      existing.image = (p.images && p.images[0]) || p.image || "";
+      existing.price = Number(p.price) || 0;
+    } else {
+      state.cart.push(snapshotProduct(p, qty));
+    }
     Storage.saveCart(state.cart);
     updateCartBadge();
     renderCart();
@@ -434,7 +624,15 @@
   function setQty(productId, qty) {
     const item = state.cart.find((c) => c.id === productId);
     if (!item) return;
-    item.qty = Math.max(1, qty);
+    const p = products().find((x) => x.id === productId);
+    const stock = p ? (Number(p.stock) || 0) : 0;
+    const target = Math.max(1, qty);
+    if (p && target > stock) {
+      toast((t("cart.stockLimit") || "Only {n} available").replace("{n}", stock));
+      item.qty = Math.max(1, Math.min(target, stock));
+    } else {
+      item.qty = target;
+    }
     Storage.saveCart(state.cart);
     updateCartBadge();
     renderCart();
@@ -443,10 +641,12 @@
     return state.cart.reduce((sum, i) => sum + i.qty, 0);
   }
   function cartTotal() {
+    // Prefer live product price (in case admin changed it), fall back to snapshot
     const map = Object.fromEntries(products().map((p) => [p.id, p]));
     return state.cart.reduce((sum, i) => {
       const p = map[i.id];
-      return sum + (p ? (Number(p.price) || 0) * i.qty : 0);
+      const price = p ? (Number(p.price) || 0) : (Number(i.price) || 0);
+      return sum + price * i.qty;
     }, 0);
   }
   function updateCartBadge() {
@@ -462,7 +662,12 @@
     const footer = document.getElementById("cart-footer");
     if (!body) return;
     const map = Object.fromEntries(products().map((p) => [p.id, p]));
-    const items = state.cart.filter((i) => map[i.id]);
+
+    // Keep only items whose product still exists
+    state.cart = state.cart.filter((i) => map[i.id]);
+    Storage.saveCart(state.cart);
+
+    const items = state.cart;
 
     if (items.length === 0) {
       body.innerHTML = `
@@ -477,17 +682,24 @@
 
     body.innerHTML = items.map((i) => {
       const p = map[i.id];
-      const name = p.name[state.lang] || p.name.en;
-      const lineTotal = (Number(p.price) || 0) * i.qty;
-      const imgHtml = p.image
-        ? `<img src="${escapeAttr(p.image)}" alt="${escapeAttr(name)}">`
+      const name = (p && (p.name[state.lang] || p.name.en)) || i.name || "";
+      const price = p ? (Number(p.price) || 0) : (Number(i.price) || 0);
+      const img = (p && ((p.images && p.images[0]) || p.image)) || i.image || "";
+      const lineTotal = price * i.qty;
+      const stock = p ? (Number(p.stock) || 0) : 0;
+      const imgHtml = img
+        ? `<img src="${escapeAttr(img)}" alt="${escapeAttr(name)}">`
         : `🌸`;
+      const stockWarn = (p && stock < i.qty)
+        ? `<div class="cart-item-stockwarn">${escapeHtml((t("cart.stockConflict") || "Only {n} available").replace("{n}", stock))}</div>`
+        : "";
       return `
-        <div class="cart-item" data-id="${escapeAttr(p.id)}">
+        <div class="cart-item" data-id="${escapeAttr(i.id)}">
           <div class="cart-item-img">${imgHtml}</div>
           <div>
             <div class="cart-item-name">${escapeHtml(name)}</div>
-            <div class="cart-item-price">${escapeHtml(formatPrice(p.price))}</div>
+            <div class="cart-item-price">${escapeHtml(formatPrice(price))}</div>
+            ${stockWarn}
             <div class="qty-group">
               <button type="button" data-action="dec">−</button>
               <span>${i.qty}</span>
@@ -502,7 +714,6 @@
       `;
     }).join("");
 
-    // bind qty buttons
     body.querySelectorAll(".cart-item").forEach((row) => {
       const id = row.getAttribute("data-id");
       const item = state.cart.find((c) => c.id === id);
@@ -536,18 +747,23 @@
     const ul = document.getElementById("checkout-items");
     ul.innerHTML = items.map((i) => {
       const p = map[i.id];
-      const name = p.name[state.lang] || p.name.en;
-      const line = (Number(p.price) || 0) * i.qty;
+      const name = (p && (p.name[state.lang] || p.name.en)) || i.name || "";
+      const price = p ? (Number(p.price) || 0) : (Number(i.price) || 0);
+      const line = price * i.qty;
       return `<li><span>${escapeHtml(name)} × ${i.qty}</span><span>${escapeHtml(formatPrice(line))}</span></li>`;
     }).join("");
     document.getElementById("checkout-total").textContent = formatPrice(cartTotal());
 
-    // reset form & proof
     const form = document.getElementById("checkout-form");
     form.reset();
-    state.proofDataUrl = "";
+    if (state.proofPreviewUrl) {
+      URL.revokeObjectURL(state.proofPreviewUrl);
+    }
+    state.proofFile = null;
+    state.proofPreviewUrl = "";
     const preview = document.getElementById("proof-preview");
     preview.classList.remove("show");
+    preview.removeAttribute("src");
     document.getElementById("proof-upload").classList.remove("has-file");
     document.getElementById("proof-upload-text").textContent = t("checkout.proofHelp");
     form.querySelectorAll(".field.error").forEach((f) => f.classList.remove("error"));
@@ -576,24 +792,21 @@
     block.style.display = (selected === "bankily") ? "block" : "none";
   }
 
-  async function handleProofChange(e) {
+  function handleProofChange(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    try {
-      const dataUrl = await fileToResizedDataUrl(file, 1200, 0.8);
-      state.proofDataUrl = dataUrl;
-      const preview = document.getElementById("proof-preview");
-      preview.src = dataUrl;
-      preview.classList.add("show");
-      const upload = document.getElementById("proof-upload");
-      upload.classList.add("has-file");
-      document.getElementById("proof-upload-text").textContent = file.name;
-    } catch (err) {
-      console.error(err);
-    }
+    if (state.proofPreviewUrl) URL.revokeObjectURL(state.proofPreviewUrl);
+    state.proofFile = file;
+    state.proofPreviewUrl = URL.createObjectURL(file);
+    const preview = document.getElementById("proof-preview");
+    preview.src = state.proofPreviewUrl;
+    preview.classList.add("show");
+    const upload = document.getElementById("proof-upload");
+    upload.classList.add("has-file");
+    document.getElementById("proof-upload-text").textContent = file.name;
   }
 
-  function submitOrder(ev) {
+  async function submitOrder(ev) {
     ev.preventDefault();
     const form = ev.target;
     const fd = new FormData(form);
@@ -612,44 +825,125 @@
         valid = false;
       }
     });
-    if (payment === "bankily" && !state.proofDataUrl) {
+    if (payment === "bankily" && !state.proofFile) {
       const upload = document.getElementById("proof-upload");
       upload.closest(".field").classList.add("error");
       valid = false;
     }
     if (!valid) return;
 
-    const map = Object.fromEntries(products().map((p) => [p.id, p]));
+    const submitBtn = form.querySelector('[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.prev = submitBtn.textContent; submitBtn.textContent = "…"; }
+
+    // Latest products for stock + snapshot
+    await Storage.getProducts();
+    const live = Object.fromEntries(products().map((p) => [p.id, p]));
+
+    // Filter out deleted products, refresh snapshot
+    state.cart = state.cart.filter((i) => live[i.id]);
+
+    if (state.cart.length === 0) {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
+      toast(t("cart.empty"));
+      closeCheckout();
+      return;
+    }
+
+    // Re-check stock before attempting decrement
+    for (const i of state.cart) {
+      const stock = Number(live[i.id].stock) || 0;
+      if (i.qty > stock) {
+        toast((t("cart.stockConflict") || "Only {n} available").replace("{n}", stock));
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
+        renderCart();
+        return;
+      }
+    }
+
     const orderItems = state.cart.map((i) => {
-      const p = map[i.id];
+      const p = live[i.id];
       return {
         id: p.id,
-        name: p.name.en,
+        name: p.name.en || i.name || "",
         nameTranslations: p.name,
+        image: (p.images && p.images[0]) || p.image || "",
         price: Number(p.price) || 0,
         qty: i.qty,
         lineTotal: (Number(p.price) || 0) * i.qty
       };
     });
 
+    const total = orderItems.reduce((s, i) => s + i.lineTotal, 0);
+
+    // Upload the proof FIRST (if needed) to avoid creating an order with no proof
+    let proofPath = "";
+    if (payment === "bankily" && state.proofFile) {
+      try {
+        proofPath = await Storage.uploadImage("proofs", state.proofFile);
+      } catch (err) {
+        console.error("proof upload failed", err);
+        toast(t("checkout.proofHelp") || "Proof upload failed");
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
+        return;
+      }
+    }
+
     const order = {
-      id: `LR${Date.now().toString().slice(-7)}${Math.floor(Math.random() * 90 + 10)}`,
+      id: makeOrderId(),
       createdAt: new Date().toISOString(),
       customer: { name, phone, address, notes },
-      payment: { method: payment, proofDataUrl: payment === "bankily" ? state.proofDataUrl : "" },
+      payment: { method: payment, proofPath: proofPath || "" },
       items: orderItems,
-      total: cartTotal(),
+      total,
       currency: settings().currency,
       status: payment === "bankily" ? "awaiting_verification" : "pending",
       lang: state.lang
     };
 
-    Storage.addOrder(order);
+    // Atomically decrement stock BEFORE writing the order
+    try {
+      await Storage.decrementStock(orderItems.map((i) => ({ id: i.id, qty: i.qty })));
+    } catch (err) {
+      console.error("decrement failed", err);
+      // Clean up the uploaded proof if we won't use it
+      if (proofPath) {
+        try { await Storage.deleteImage("proofs", proofPath); } catch (e) { /* ignore */ }
+      }
+      const pid = err && err.productId;
+      const p = pid ? live[pid] : null;
+      const nm = p ? (p.name[state.lang] || p.name.en) : "";
+      toast((t("cart.stockConflict") || "Only available") + (nm ? ` — ${nm}` : ""));
+      await Storage.getProducts();
+      renderProducts();
+      renderCart();
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
+      return;
+    }
+
+    // Now write the order. If this fails we attempt to restock.
+    try {
+      await Storage.addOrder(order);
+    } catch (err) {
+      console.error("addOrder failed", err);
+      try {
+        await Storage.restockItems(orderItems.map((i) => ({ id: i.id, qty: i.qty })));
+      } catch (e) { /* ignore */ }
+      if (proofPath) {
+        try { await Storage.deleteImage("proofs", proofPath); } catch (e) { /* ignore */ }
+      }
+      toast("Could not submit order. Please try again.");
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
+      return;
+    }
+
     Storage.clearCart();
     state.cart = [];
+    state.proofFile = null;
+    if (state.proofPreviewUrl) { URL.revokeObjectURL(state.proofPreviewUrl); state.proofPreviewUrl = ""; }
     updateCartBadge();
     renderCart();
     closeCheckout();
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.prev || t("checkout.placeOrder"); }
     showConfirmation(order);
   }
 
@@ -660,7 +954,6 @@
       ? t("confirm.pendingBankily")
       : t("confirm.pendingCod");
 
-    // WhatsApp message
     const s = settings();
     const lines = [
       `🌸 *La Roselle — ${order.id}*`,
@@ -671,7 +964,7 @@
       order.customer.notes ? `${t("checkout.notes")}: ${order.customer.notes}` : null,
       ``,
       `${t("checkout.summary")}:`,
-      ...order.items.map((i) => `• ${i.nameTranslations[order.lang] || i.name} × ${i.qty} — ${formatPrice(i.lineTotal)}`),
+      ...order.items.map((i) => `• ${(i.nameTranslations && i.nameTranslations[order.lang]) || i.name} × ${i.qty} — ${formatPrice(i.lineTotal)}`),
       ``,
       `${t("cart.total")}: ${formatPrice(order.total)}`,
       `${t("checkout.payment")}: ${order.payment.method === "bankily" ? t("checkout.pay.bankily") : t("checkout.pay.cod")}`
@@ -698,6 +991,22 @@
     document.body.style.overflow = "";
   }
 
+  /* ---------- Toast ---------- */
+  let _toastTimer = null;
+  function toast(msg) {
+    let el = document.getElementById("site-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "site-toast";
+      el.className = "site-toast";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+  }
+
   /* ---------- Utils ---------- */
   function escapeHtml(str) {
     return String(str ?? "")
@@ -706,20 +1015,51 @@
   }
   function escapeAttr(s) { return escapeHtml(s); }
 
+  /* ---------- Realtime wiring ---------- */
+  function subscribeAll() {
+    state.channels.push(
+      Storage.subscribeTable("products", async () => {
+        await Storage.getProducts();
+        renderCategoryFilter();
+        renderProducts();
+        renderCart();
+      }),
+      Storage.subscribeTable("settings", async () => {
+        await Storage.getSettings();
+        syncSettingsToUi();
+      }),
+      Storage.subscribeTable("content", async () => {
+        await Storage.getContent();
+        applyLanguage(state.lang);
+      }),
+      Storage.subscribeTable("theme", async () => {
+        await applyTheme();
+        syncSettingsToUi();
+      })
+    );
+  }
+  function unsubscribeAll() {
+    state.channels.forEach((ch) => {
+      try { sb.removeChannel(ch); } catch (e) { /* ignore */ }
+    });
+    state.channels = [];
+  }
+
   /* ---------- Init ---------- */
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
     // Language buttons
     document.querySelectorAll(".lang-switch button").forEach((btn) => {
       btn.addEventListener("click", () => applyLanguage(btn.dataset.lang));
     });
 
-    // Modals / drawers close buttons
+    // Modal / drawer close buttons
     document.querySelectorAll("[data-close-modal]").forEach((el) => el.addEventListener("click", closeProductModal));
     document.querySelectorAll("[data-close-drawer]").forEach((el) => el.addEventListener("click", closeDrawer));
     document.querySelectorAll("[data-close-checkout]").forEach((el) => el.addEventListener("click", closeCheckout));
     document.querySelectorAll("[data-close-confirm]").forEach((el) => el.addEventListener("click", closeConfirm));
     document.querySelectorAll("[data-close-share]").forEach((el) => el.addEventListener("click", closeShareModal));
-    document.getElementById("share-copy-btn").addEventListener("click", copyShareLink);
+    const shareCopyBtn = document.getElementById("share-copy-btn");
+    if (shareCopyBtn) shareCopyBtn.addEventListener("click", copyShareLink);
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -727,7 +1067,6 @@
       }
     });
 
-    // If the page was opened with #product=<id>, auto-open that product
     function openFromHash() {
       const match = (window.location.hash || "").match(/product=([^&]+)/);
       if (!match) return;
@@ -747,27 +1086,31 @@
     document.querySelectorAll('input[name="payment"]').forEach((el) => {
       el.addEventListener("change", syncPaymentMethod);
     });
-    document.querySelector('#proof-upload input[type="file"]').addEventListener("change", handleProofChange);
+    const proofInput = document.querySelector('#proof-upload input[type="file"]');
+    if (proofInput) proofInput.addEventListener("change", handleProofChange);
     document.getElementById("checkout-form").addEventListener("submit", submitOrder);
+
+    // Search
+    bindSearch();
 
     // Year
     const yearEl = document.getElementById("year");
     if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-    // React to storage changes (e.g. admin edits in another tab)
-    window.addEventListener("storage", (e) => {
-      if ([STORAGE_KEYS.products, STORAGE_KEYS.settings, STORAGE_KEYS.content, STORAGE_KEYS.theme].includes(e.key)) {
-        applyTheme();
-        renderCategoryFilter();
-        renderProducts();
-        renderCart();
-        applyLanguage(state.lang);
-      }
-    });
+    // Load data from Supabase, then render
+    try {
+      await Storage.init();
+    } catch (e) {
+      console.error("Storage.init failed", e);
+    }
 
-    applyTheme();
+    await applyTheme();
     applyLanguage(state.lang);
     updateCartBadge();
     openFromHash();
+
+    // Realtime subscriptions
+    subscribeAll();
+    window.addEventListener("beforeunload", unsubscribeAll);
   });
 })();
